@@ -114,3 +114,4 @@ Schemas are exported to `app/schemas/` so migrations can be diffed in review. Bu
 ## Versions
 
 Gradle 8.13 · AGP 8.8.2 · Kotlin 2.1.20 · Ktor 3.1.3 · Room 2.7.2 · KSP 2.1.20-2.0.1 · compileSdk 35 · minSdk 26 (core library desugaring on)
+# ktorServer
