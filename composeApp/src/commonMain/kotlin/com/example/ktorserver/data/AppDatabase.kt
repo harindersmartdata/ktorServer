@@ -14,7 +14,7 @@ const val DATABASE_NAME = "ktor-server.db"
 
 @Database(
     entities = [User::class, ChangeLogEntry::class, ReplicationState::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -100,6 +100,18 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 }
 
 /**
+ * v2 -> v3: remembers where the peer is.
+ *
+ * Both columns are nullable, so SQLite can add them in place — no table rebuild.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE replication_state ADD COLUMN peerAddress TEXT")
+        connection.execSQL("ALTER TABLE replication_state ADD COLUMN peerNodeId TEXT")
+    }
+}
+
+/**
  * Shared tail of the builder chain.
  *
  * Note there is no seed callback any more. Two servers each inventing "ada@example.com"
@@ -110,5 +122,5 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 fun RoomDatabase.Builder<AppDatabase>.configureAndBuild(): AppDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(ioDispatcher)
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()

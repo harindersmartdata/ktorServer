@@ -1,6 +1,12 @@
 package com.example.ktorserver.server
 
 import com.example.ktorserver.data.ChangeLogDao
+import com.example.ktorserver.data.ConfigureRoleRequest
+import com.example.ktorserver.data.HeartbeatRequest
+import com.example.ktorserver.data.NodeRole
+import com.example.ktorserver.data.NotPrimaryResponse
+import com.example.ktorserver.data.ReplicationState
+import com.example.ktorserver.data.ReplicationStatus
 import com.example.ktorserver.data.CreateUserRequest
 import com.example.ktorserver.data.ErrorResponse
 import com.example.ktorserver.data.HealthResponse
@@ -11,6 +17,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.logging.KtorSimpleLogger
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.application.log
 import io.ktor.server.cio.CIO
@@ -140,6 +147,92 @@ fun Application.apiModule(
             )
         }
 
+        route("/replication") {
+
+            get("/status") {
+                val state = store.current()
+                call.respond(
+                    ReplicationStatus(
+                        nodeId = state.nodeId,
+                        role = state.role.name,
+                        epoch = state.epoch,
+                        peerAddress = state.peerAddress,
+                        peerNodeId = state.peerNodeId,
+                        localSeq = changeLog.latestSeq(state.nodeId),
+                        lastAppliedSeq = state.lastAppliedSeq,
+                    )
+                )
+            }
+
+            // Operator setup: declare this node primary or secondary.
+            post("/role") {
+                val body = call.receive<ConfigureRoleRequest>()
+                val role = runCatching { NodeRole.valueOf(body.role.uppercase()) }.getOrNull()
+                    ?: return@post call.respond(
+                        HttpStatusCode.BadRequest,
+                        ErrorResponse("role must be PRIMARY, SECONDARY or UNCONFIGURED"),
+                    )
+
+                val state = store.configure(role, body.peerAddress)
+                call.respond(
+                    ReplicationStatus(
+                        nodeId = state.nodeId,
+                        role = state.role.name,
+                        epoch = state.epoch,
+                        peerAddress = state.peerAddress,
+                        peerNodeId = state.peerNodeId,
+                    )
+                )
+            }
+
+            /**
+             * The peer tells us the epoch it is operating under.
+             *
+             * Two jobs, both essential to fencing: a secondary learns the epoch it must
+             * out-rank if it is ever promoted, and a primary that has been superseded
+             * discovers it and stands down before taking another sale.
+             */
+            post("/heartbeat") {
+                val body = call.receive<HeartbeatRequest>()
+                val before = store.current()
+                val state = store.observeEpoch(body.epoch, body.nodeId)
+
+                if (before.role == NodeRole.PRIMARY && state.role != NodeRole.PRIMARY) {
+                    call.application.log.warn(
+                        "DEMOTED: peer ${body.nodeId} is at epoch ${body.epoch}, " +
+                            "ours was ${before.epoch} - standing down"
+                    )
+                }
+
+                call.respond(
+                    ReplicationStatus(
+                        nodeId = state.nodeId,
+                        role = state.role.name,
+                        epoch = state.epoch,
+                        peerAddress = state.peerAddress,
+                        peerNodeId = state.peerNodeId,
+                    )
+                )
+            }
+
+            // Failover: claim a new epoch. The operator decides when, not the software.
+            post("/promote") {
+                val state = store.promote()
+                call.application.log.warn(
+                    "PROMOTED to primary at epoch ${state.epoch} (node ${state.nodeId})"
+                )
+                call.respond(
+                    ReplicationStatus(
+                        nodeId = state.nodeId,
+                        role = state.role.name,
+                        epoch = state.epoch,
+                        peerAddress = state.peerAddress,
+                        peerNodeId = state.peerNodeId,
+                    )
+                )
+            }
+        }
+
         route("/users") {
 
             // GET /users -> list every user
@@ -167,6 +260,8 @@ fun Application.apiModule(
 
             // POST /users -> create a user
             post {
+                call.requirePrimary(store) ?: return@post
+
                 val body = call.receive<CreateUserRequest>()
 
                 val name = body.name.trim()
@@ -201,6 +296,8 @@ fun Application.apiModule(
 
             // DELETE /users/{id}
             delete("/{id}") {
+                call.requirePrimary(store) ?: return@delete
+
                 val id = call.parameters["id"]?.takeIf { it.isNotBlank() }
                     ?: return@delete call.respond(
                         HttpStatusCode.BadRequest,
@@ -215,6 +312,32 @@ fun Application.apiModule(
             }
         }
     }
+}
+
+/**
+ * Rejects a write unless this node is the primary.
+ *
+ * Reads are deliberately still allowed on a secondary — it is a replica, and letting it
+ * serve reads is most of the point. Only writes are fenced.
+ *
+ * 421 carries the peer's address as the likely primary. With exactly two servers that is
+ * a safe inference; it becomes a guess if a third server is ever added.
+ */
+private suspend fun ApplicationCall.requirePrimary(
+    store: com.example.ktorserver.data.ReplicationStore,
+): ReplicationState? {
+    val state = store.current()
+    if (state.role == NodeRole.PRIMARY) return state
+
+    respond(
+        HttpStatusCode(421, "Misdirected Request"),
+        NotPrimaryResponse(
+            role = state.role.name,
+            epoch = state.epoch,
+            primaryAddress = state.peerAddress,
+        ),
+    )
+    return null
 }
 
 /** kotlinx-datetime renders ISO-8601 in UTC on every target. */

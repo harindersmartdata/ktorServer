@@ -11,6 +11,7 @@ import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.data.databaseFile
 import com.example.ktorserver.server.DesktopServerController
+import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.ui.App
 
 /**
@@ -23,8 +24,12 @@ fun main() = application {
     val repository = remember {
         UserRepository(database.userDao(), database.writeDao(), store)
     }
+    // TUCOUNT_PORT lets a second instance run alongside the first when testing failover.
+    val port = remember {
+        System.getenv("TUCOUNT_PORT")?.toIntOrNull() ?: KtorServer.DEFAULT_PORT
+    }
     val controller = remember {
-        DesktopServerController(repository, store, database.changeLogDao())
+        DesktopServerController(repository, store, database.changeLogDao(), port)
     }
 
     // A till should be serving the moment the machine finishes booting — nobody is
@@ -36,7 +41,7 @@ fun main() = application {
             controller.stop()
             exitApplication()
         },
-        title = "TuCount local server",
+        title = "TuCount local server :$port",
         state = rememberWindowState(width = 560.dp, height = 820.dp),
     ) {
         App(

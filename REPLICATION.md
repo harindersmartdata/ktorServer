@@ -28,8 +28,14 @@ network gear is out.
       `change_log` with tombstones, `replication_state` with node id and epoch, all
       writes atomic with their log entry via `WriteDao`. Migration `MIGRATION_1_2`
       verified against a real v1 database.
-- [ ] **2. Roles + epoch** — declare PRIMARY/SECONDARY, reject writes on a secondary,
-      enforce the fencing token.
+- [x] **2. Roles + epoch** — `POST /replication/role`, `/promote`, `/heartbeat`;
+      writes rejected on a secondary with `421` + the primary's address; epoch adopted
+      from the peer so a promotion always out-ranks the old primary; a superseded
+      primary stands down on hearing a higher epoch.
+      **Known window:** a returning primary accepts writes until it hears the higher
+      epoch. Those writes are stamped with the stale epoch in `change_log`, which is
+      how step 7 will find them. Closing the window is step 4 (confirm epoch with the
+      peer before serving).
 - [ ] **3. Synchronous replication** — ship the log to the peer, wait for ack, track the
       acked high-water mark, degrade per decision 1a.
 - [ ] **4. Health + failure detection** — heartbeats, honest liveness, timeout tuning.
@@ -49,11 +55,13 @@ No change log means no way to know what changed. Wall-clock ordering is wrong be
 terminals' clocks disagree. Multi-table transactions must apply atomically downstream
 (`txId` groups them — the grouping exists, applying by group lands in step 3).
 
-### Split-brain — *steps 2 and 5*
+### Split-brain — *steps 2 (done), 4, 5 and 7*
 T1 is not dead, just unreachable. T2 gets promoted. Both accept sales and diverge.
 Manual promotion reduces this but does not solve it: the person at T2 cannot see that
 T1 is still serving someone else. The guard is the **epoch** — any node that sees a
-higher epoch than its own must stop accepting writes immediately.
+higher epoch than its own must stop accepting writes immediately. Implemented in step 2
+and demonstrated end to end, including a returning primary standing down. It bounds the
+damage rather than eliminating it: see the window noted against step 2.
 
 ### Sync cost — *step 3*
 Per decision 1a, a slow or dead T2 must not stop the till, so the sync guarantee is

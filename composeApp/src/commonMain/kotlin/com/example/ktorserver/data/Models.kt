@@ -87,6 +87,10 @@ data class ReplicationState(
     /** High-water mark applied from the peer, for resuming a stream. */
     val lastAppliedNodeId: String? = null,
     val lastAppliedSeq: Long = 0L,
+    /** Where the peer listens, e.g. "192.168.1.11:8080". Null until configured. */
+    val peerAddress: String? = null,
+    /** Learned on first contact; lets us tell a client who the real primary is. */
+    val peerNodeId: String? = null,
 ) {
     companion object { const val SINGLETON_ID = 1 }
 }
@@ -117,3 +121,52 @@ data class HealthResponse(
 
 @Serializable
 data class ErrorResponse(val error: String, val details: String? = null)
+
+// ---- Replication control DTOs ----------------------------------------------
+
+@Serializable
+data class ReplicationStatus(
+    val nodeId: String,
+    val role: String,
+    val epoch: Long,
+    val peerAddress: String? = null,
+    val peerNodeId: String? = null,
+    /** Highest seq this node originated. */
+    val localSeq: Long = 0,
+    /** Highest peer seq this node has applied. */
+    val lastAppliedSeq: Long = 0,
+)
+
+/** Body of `POST /replication/role`. */
+@Serializable
+data class ConfigureRoleRequest(
+    val role: String,
+    val peerAddress: String? = null,
+)
+
+/**
+ * Returned with 421 when a write reaches a node that is not primary.
+ *
+ * Carries the primary's address so a client can retry without a discovery round, and
+ * the epoch so a client holding a stale answer can tell it is out of date.
+ */
+@Serializable
+data class NotPrimaryResponse(
+    val error: String = "This node is not the primary",
+    val role: String,
+    val epoch: Long,
+    val primaryAddress: String? = null,
+)
+
+/**
+ * Sent by the primary to the secondary, carrying the epoch it is writing under.
+ *
+ * This is what keeps the fencing token globally monotonic. A secondary that has never
+ * heard the primary's epoch would promote itself to an epoch the old primary already
+ * used, and nothing could then tell which of the two is newer.
+ */
+@Serializable
+data class HeartbeatRequest(
+    val nodeId: String,
+    val epoch: Long,
+)

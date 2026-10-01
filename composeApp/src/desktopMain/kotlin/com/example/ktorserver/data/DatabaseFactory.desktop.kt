@@ -9,10 +9,13 @@ import java.io.File
  * On Windows that is `%LOCALAPPDATA%\TuCountServer` — per-user, writable without
  * admin rights, and outside Program Files, which is read-only for standard accounts.
  * Falls back to a dotfolder in the home directory on macOS/Linux.
+ *
+ * TUCOUNT_DATA_DIR overrides both, which is how two servers run side by side on one
+ * machine for failover testing.
  */
 fun databaseFile(): File {
-    val base = System.getenv("LOCALAPPDATA")
-        ?.let { File(it, "TuCountServer") }
+    val base = System.getenv("TUCOUNT_DATA_DIR")?.let(::File)
+        ?: System.getenv("LOCALAPPDATA")?.let { File(it, "TuCountServer") }
         ?: File(System.getProperty("user.home"), ".tucount-server")
 
     base.mkdirs()
