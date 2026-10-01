@@ -4,52 +4,111 @@ import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.RoomDatabaseConstructor
+import androidx.room.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import com.example.ktorserver.util.ioDispatcher
-import kotlinx.datetime.Clock
 
 const val DATABASE_NAME = "ktor-server.db"
 
-@Database(entities = [User::class], version = 1, exportSchema = true)
+@Database(
+    entities = [User::class, ChangeLogEntry::class, ReplicationState::class],
+    version = 2,
+    exportSchema = true,
+)
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
+    abstract fun changeLogDao(): ChangeLogDao
+    abstract fun replicationStateDao(): ReplicationStateDao
+    abstract fun writeDao(): WriteDao
 }
 
-/**
- * Room's KSP processor generates the `actual` for this on each target, which is why
- * there is no hand-written actual anywhere in the tree.
- */
 @Suppress("NO_ACTUAL_FOR_EXPECT", "EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
 expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
     override fun initialize(): AppDatabase
 }
 
 /**
- * Shared tail of the builder chain. Each platform opens the file its own way — Android
- * through `Room.databaseBuilder(context, ...)`, desktop from an absolute path — then
- * hands the builder here so driver, dispatcher and seeding stay identical.
+ * v1 -> v2: makes the schema replicable.
+ *
+ * `users.id` changes from an autoincrement INTEGER to a globally unique TEXT id, which
+ * means recreating the table — SQLite cannot alter a primary key in place. Existing
+ * rows keep their data and are given random ids; they predate replication, so no peer
+ * can disagree about them.
+ */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE users RENAME TO users_v1")
+        connection.execSQL(
+            """
+            CREATE TABLE users (
+                id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                createdAt INTEGER NOT NULL,
+                PRIMARY KEY(id)
+            )
+            """.trimIndent()
+        )
+        connection.execSQL(
+            """
+            INSERT INTO users (id, name, email, createdAt)
+            SELECT lower(hex(randomblob(16))), name, email, createdAt FROM users_v1
+            """.trimIndent()
+        )
+        connection.execSQL("DROP TABLE users_v1")
+        connection.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_users_email ON users (email)")
+
+        connection.execSQL(
+            """
+            CREATE TABLE change_log (
+                nodeId TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                txId TEXT NOT NULL,
+                tableName TEXT NOT NULL,
+                rowId TEXT NOT NULL,
+                op TEXT NOT NULL,
+                payload TEXT,
+                epoch INTEGER NOT NULL,
+                createdAt INTEGER NOT NULL,
+                PRIMARY KEY(nodeId, seq)
+            )
+            """.trimIndent()
+        )
+        connection.execSQL("CREATE INDEX IF NOT EXISTS index_change_log_txId ON change_log (txId)")
+        connection.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_change_log_tableName_rowId " +
+                "ON change_log (tableName, rowId)"
+        )
+
+        connection.execSQL(
+            """
+            CREATE TABLE replication_state (
+                id INTEGER NOT NULL,
+                nodeId TEXT NOT NULL,
+                role TEXT NOT NULL,
+                epoch INTEGER NOT NULL,
+                lastAppliedNodeId TEXT,
+                lastAppliedSeq INTEGER NOT NULL,
+                PRIMARY KEY(id)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+/**
+ * Shared tail of the builder chain.
+ *
+ * Note there is no seed callback any more. Two servers each inventing "ada@example.com"
+ * with different ids would collide on the unique email index the first time they synced.
+ * In a replicated system a node must not invent rows on its own — a fresh secondary gets
+ * its data from the primary, not from a local seed.
  */
 fun RoomDatabase.Builder<AppDatabase>.configureAndBuild(): AppDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(ioDispatcher)
-        .addCallback(SeedCallback)
+        .addMigrations(MIGRATION_1_2)
         .build()
-
-/** Inserts demo rows once, when the file is first created. */
-private object SeedCallback : RoomDatabase.Callback() {
-    override fun onCreate(connection: SQLiteConnection) {
-        val now = Clock.System.now().toEpochMilliseconds()
-        // Literal values: these are fixed seed constants, not user input.
-        connection.execSQL(
-            "INSERT INTO users (name, email, createdAt) " +
-                "VALUES ('Ada Lovelace', 'ada@example.com', $now)"
-        )
-        connection.execSQL(
-            "INSERT INTO users (name, email, createdAt) " +
-                "VALUES ('Alan Turing', 'alan@example.com', $now)"
-        )
-    }
-}

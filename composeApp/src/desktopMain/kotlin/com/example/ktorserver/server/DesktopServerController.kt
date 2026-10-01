@@ -1,5 +1,7 @@
 package com.example.ktorserver.server
 
+import com.example.ktorserver.data.ChangeLogDao
+import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.UserRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,10 +13,12 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class DesktopServerController(
     repository: UserRepository,
+    store: ReplicationStore,
+    changeLog: ChangeLogDao,
     port: Int = KtorServer.DEFAULT_PORT,
 ) : ServerController {
 
-    private val server = KtorServer(repository, port)
+    private val server = KtorServer(repository, store, changeLog, port)
 
     private val _isRunning = MutableStateFlow(false)
     override val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()

@@ -30,8 +30,11 @@ import kotlinx.coroutines.flow.asStateFlow
 class KtorServerService : Service() {
 
     private val server by lazy {
+        val app = application as KtorServerApp
         KtorServer(
-            repository = (application as KtorServerApp).userRepository,
+            repository = app.userRepository,
+            store = app.replicationStore,
+            changeLog = app.changeLogDao,
             port = KtorServer.DEFAULT_PORT,
         )
     }

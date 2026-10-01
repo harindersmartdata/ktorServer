@@ -1,8 +1,10 @@
 package com.example.ktorserver.server
 
+import com.example.ktorserver.data.ChangeLogDao
 import com.example.ktorserver.data.CreateUserRequest
 import com.example.ktorserver.data.ErrorResponse
 import com.example.ktorserver.data.HealthResponse
+import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.UsersResponse
 import io.ktor.http.HttpStatusCode
@@ -33,6 +35,8 @@ import kotlinx.serialization.json.Json
  */
 class KtorServer(
     private val repository: UserRepository,
+    private val store: ReplicationStore,
+    private val changeLog: ChangeLogDao,
     private val port: Int = DEFAULT_PORT,
 ) {
 
@@ -52,7 +56,7 @@ class KtorServer(
             // 0.0.0.0 makes the server reachable from other devices on the same
             // network. Use 127.0.0.1 to keep it on-device only.
             host = "0.0.0.0",
-            module = { apiModule(startedAt, repository) },
+            module = { apiModule(startedAt, repository, store, changeLog) },
         ).also {
             // wait = false: never block the caller's thread.
             it.start(wait = false)
@@ -76,7 +80,12 @@ class KtorServer(
 }
 
 /** All plugins and routes for the local API. */
-fun Application.apiModule(startedAt: Long, repository: UserRepository) {
+fun Application.apiModule(
+    startedAt: Long,
+    repository: UserRepository,
+    store: ReplicationStore,
+    changeLog: ChangeLogDao,
+) {
 
     install(ContentNegotiation) {
         json(
@@ -116,12 +125,17 @@ fun Application.apiModule(startedAt: Long, repository: UserRepository) {
 
         // GET /health -> liveness probe
         get("/health") {
+            val state = store.current()
             call.respond(
                 HealthResponse(
                     status = "UP",
                     uptimeMillis = Clock.System.now().toEpochMilliseconds() - startedAt,
                     userCount = repository.count(),
                     serverTime = isoNow(),
+                    nodeId = state.nodeId,
+                    role = state.role.name,
+                    epoch = state.epoch,
+                    localSeq = changeLog.latestSeq(state.nodeId),
                 )
             )
         }
@@ -136,10 +150,10 @@ fun Application.apiModule(startedAt: Long, repository: UserRepository) {
 
             // GET /users/{id} -> one user
             get("/{id}") {
-                val id = call.parameters["id"]?.toIntOrNull()
+                val id = call.parameters["id"]?.takeIf { it.isNotBlank() }
                     ?: return@get call.respond(
                         HttpStatusCode.BadRequest,
-                        ErrorResponse("id must be an integer"),
+                        ErrorResponse("id must not be blank"),
                     )
 
                 val user = repository.byId(id)
@@ -187,10 +201,10 @@ fun Application.apiModule(startedAt: Long, repository: UserRepository) {
 
             // DELETE /users/{id}
             delete("/{id}") {
-                val id = call.parameters["id"]?.toIntOrNull()
+                val id = call.parameters["id"]?.takeIf { it.isNotBlank() }
                     ?: return@delete call.respond(
                         HttpStatusCode.BadRequest,
-                        ErrorResponse("id must be an integer"),
+                        ErrorResponse("id must not be blank"),
                     )
 
                 if (repository.delete(id)) {

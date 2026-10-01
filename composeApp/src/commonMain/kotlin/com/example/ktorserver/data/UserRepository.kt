@@ -1,22 +1,32 @@
 package com.example.ktorserver.data
 
 import androidx.sqlite.SQLiteException
-import kotlinx.datetime.Clock
 import kotlinx.coroutines.flow.Flow
+import kotlinx.datetime.Clock
+import kotlinx.serialization.json.Json
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * SQLite-backed user store, shared by the HTTP routes and the UI.
  *
- * Every write lands in the `users` table, so data survives process death and reboots.
+ * Every mutation goes through [WriteDao] so the row and its change_log entry land in the
+ * same transaction. Nothing here writes to `users` directly.
  */
-class UserRepository(private val dao: UserDao) {
+@OptIn(ExperimentalUuidApi::class)
+class UserRepository(
+    private val dao: UserDao,
+    private val writeDao: WriteDao,
+    private val store: ReplicationStore,
+    private val json: Json = Json { encodeDefaults = true },
+) {
 
     /** Cold flow straight from Room; re-emits on every table change. */
     val users: Flow<List<User>> = dao.observeAll()
 
     suspend fun all(): List<User> = dao.all()
 
-    suspend fun byId(id: Int): User? = dao.byId(id)
+    suspend fun byId(id: String): User? = dao.byId(id)
 
     suspend fun existsByEmail(email: String): Boolean = dao.byEmail(email) != null
 
@@ -28,18 +38,37 @@ class UserRepository(private val dao: UserDao) {
      * slipping past the pre-check in the route.
      */
     suspend fun add(name: String, email: String): User? {
+        val state = store.current()
+        val now = Clock.System.now().toEpochMilliseconds()
         val user = User(
+            id = Uuid.random().toString(),
             name = name.trim(),
             email = email.trim(),
-            createdAt = Clock.System.now().toEpochMilliseconds(),
+            createdAt = now,
         )
         return try {
-            val id = dao.insert(user)
-            user.copy(id = id.toInt())
+            writeDao.insertUserLogged(
+                user = user,
+                nodeId = state.nodeId,
+                epoch = state.epoch,
+                txId = Uuid.random().toString(),
+                payload = json.encodeToString(user),
+                now = now,
+            )
+            user
         } catch (_: SQLiteException) {
             null
         }
     }
 
-    suspend fun delete(id: Int): Boolean = dao.deleteById(id) > 0
+    suspend fun delete(id: String): Boolean {
+        val state = store.current()
+        return writeDao.deleteUserLogged(
+            id = id,
+            nodeId = state.nodeId,
+            epoch = state.epoch,
+            txId = Uuid.random().toString(),
+            now = Clock.System.now().toEpochMilliseconds(),
+        )
+    }
 }

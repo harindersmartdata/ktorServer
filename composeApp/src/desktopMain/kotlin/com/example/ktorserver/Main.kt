@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.data.databaseFile
@@ -18,8 +19,13 @@ import com.example.ktorserver.ui.App
  */
 fun main() = application {
     val database = remember { createDatabase() }
-    val repository = remember { UserRepository(database.userDao()) }
-    val controller = remember { DesktopServerController(repository) }
+    val store = remember { ReplicationStore(database.replicationStateDao()) }
+    val repository = remember {
+        UserRepository(database.userDao(), database.writeDao(), store)
+    }
+    val controller = remember {
+        DesktopServerController(repository, store, database.changeLogDao())
+    }
 
     // A till should be serving the moment the machine finishes booting — nobody is
     // going to click Start every morning.
