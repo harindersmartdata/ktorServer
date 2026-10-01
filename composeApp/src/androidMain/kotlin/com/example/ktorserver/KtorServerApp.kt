@@ -1,8 +1,9 @@
 package com.example.ktorserver
 
 import android.app.Application
-import com.example.ktorserver.data.AppDatabase
 import com.example.ktorserver.data.UserRepository
+import com.example.ktorserver.data.createDatabase
+import com.example.ktorserver.data.databasePath
 
 /**
  * Owns the single database instance for the process.
@@ -12,9 +13,9 @@ import com.example.ktorserver.data.UserRepository
  */
 class KtorServerApp : Application() {
 
-    val database by lazy { AppDatabase.get(this) }
+    val database by lazy { createDatabase(this) }
 
     val userRepository by lazy { UserRepository(database.userDao()) }
 
-    val databasePath: String by lazy { AppDatabase.path(this) }
+    val databasePath: String by lazy { databasePath(this) }
 }

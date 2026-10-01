@@ -1,78 +1,70 @@
-# Handoff — continuing on Windows
+# Handoff — Windows / desktop target
 
 ## Where this stands
 
-A working Android app: embedded Ktor (CIO) HTTP server in a foreground service, backed by
-SQLite via Room, with a Compose UI. Built, installed and verified end-to-end on a physical
-Samsung SM-X210 (Android 15) — all endpoints exercised, persistence confirmed across a
-process force-stop.
+**The KMP restructure is done.** One module, `composeApp`, builds both targets from one
+codebase:
 
-See `README.md` for endpoints, build steps and the Android-specific gotchas already solved
-(CIO over Netty, slf4j-simple instead of Logback, `dataSync` foreground service type,
-META-INF packaging excludes, R8 keep rules).
+| Target | Task | Verified |
+|---|---|---|
+| Android APK | `./gradlew :composeApp:assembleDebug` | builds on macOS |
+| Desktop app | `./gradlew :composeApp:run` | runs; all 5 endpoints exercised on macOS |
+| Windows `.exe` | `./gradlew :composeApp:packageReleaseExe` | **not yet — must run on Windows** |
 
-## The goal
+The desktop build was verified end-to-end on macOS: server starts with the process,
+Room created `~/.tucount-server/ktor-server.db`, the seed callback ran, and
+`GET/POST/DELETE` returned 200/201/204 with 400/404/409 on the error paths.
 
-**One Kotlin codebase producing both an Android APK and a Windows .exe.**
+Because the desktop target is plain Kotlin/JVM, "runs on macOS" and "runs on Windows"
+differ only in packaging — but the `.exe` itself is still unproduced (see below).
 
-Target structure — Kotlin Multiplatform + Compose Multiplatform, single module:
+## What is left
+
+1. **Build the installer on Windows.** `jpackage` does not cross-compile.
+   On the Windows PC: `./gradlew :composeApp:packageReleaseExe`.
+   Needs a JDK 17+ that includes `jpackage`, and WiX Toolset 3.x on PATH for `.exe`/`.msi`.
+2. **Windows Firewall** will prompt on first run because the server binds `0.0.0.0:8080`.
+   Allow it on private networks only.
+3. **Auth.** Still none. On a desktop on a shop LAN this is more exposed than on a phone.
+
+## How the code is split
 
 ```
-composeApp/
-├── src/commonMain/    Ktor routes, Room entities/DAO, Compose UI  <- everything shared
-├── src/androidMain/   MainActivity + foreground service
-└── src/desktopMain/   fun main() { application { Window { App() } } }
+composeApp/src/
+├── commonMain/   Ktor routes, Room entities/DAO/repository, the whole Compose UI
+├── androidMain/  MainActivity, foreground service, Application, Context-based DB open
+└── desktopMain/  fun main(), DesktopServerController, LOCALAPPDATA-based DB open
 ```
 
-```bash
-./gradlew :composeApp:assembleDebug        # -> APK
-./gradlew :composeApp:packageReleaseExe    # -> Windows installer (Windows only)
-```
+`ServerController` (commonMain) is the seam: Android routes start/stop through the
+foreground service, desktop calls the engine directly. The UI only sees the interface.
 
-## Why the work moved to Windows
+## Decisions made during the port
 
-`jpackage`, which Compose Desktop uses to produce the installer, does not cross-compile.
-A Windows `.exe` must be built on Windows. Everything else (KMP restructure, APK) can be
-done anywhere; the decision was to do it all on the Windows PC.
+- **Desktop target is `jvm("desktop")`, not Kotlin/Native `mingwX64`.** Room has no
+  stable Windows-native support and CIO on native is limited. JVM keeps one codebase
+  and all the existing JVM libraries; `jpackage` bundles a JRE so the Windows machine
+  needs no Java installed.
+- **Compose Multiplatform 1.8.2**, which is the stable release built for Kotlin 2.1.20.
+  1.9.x needs Kotlin 2.2 — do not bump one without the other.
+- **Compose imports stay `androidx.compose.*`** — the earlier note in this file about
+  moving to `org.jetbrains.compose.*` was wrong for current CMP. Only `compose.desktop`
+  and resources use the JetBrains namespace. The screen body ported untouched.
+- `android.util.Log` -> `io.ktor.util.logging.KtorSimpleLogger` (multiplatform).
+- `SimpleDateFormat`/`System.currentTimeMillis()` -> `kotlinx-datetime` `Clock`.
+- `SQLiteConstraintException` -> `androidx.sqlite.SQLiteException`.
+- `Dispatchers.IO` is not in common code, so `ioDispatcher` is `expect`/`actual`.
+  Both actuals are identical JVM code — the indirection exists only for the compiler.
+- Room KMP needs `@ConstructedBy` + an `expect object` constructor; KSP generates the
+  actual per target (`kspAndroid`, `kspDesktop`).
 
-## Migration notes for the next session
+## Open questions, still not decided
 
-What ports unchanged:
-- **Ktor CIO** is plain Kotlin/JVM. `server/KtorServer.kt` is 206 lines with exactly one
-  Android import (`android.util.Log`) — swap it for SLF4J and it compiles for both targets.
-- **Room 2.7.2** (already pinned here) supports Multiplatform via the bundled SQLite driver.
-  Needs `androidx.sqlite:sqlite-bundled`, `@ConstructedBy` + an `expect object` database
-  constructor, and per-target KSP configurations (`kspAndroid`, `kspDesktop`).
-- `util/NetworkUtils.kt` — zero Android imports.
+1. GitHub Actions to build the APK and the `.exe` on every tag — would remove the
+   "must be on Windows" bottleneck for releases.
+2. Auth before this leaves a LAN (a static bearer token would do).
 
-What gets rewritten:
-- `MainActivity.kt` (221 lines, 41 androidx imports): Compose imports move from
-  `androidx.compose.*` to `org.jetbrains.compose.*`; the screen body itself is portable.
-- `service/KtorServerService.kt` (158 lines): Android-only. On desktop the server just
-  starts with the process — no service, no notification.
-- `UserRepository.kt` catches `android.database.sqlite.SQLiteConstraintException`; needs a
-  common equivalent (Room KMP throws `androidx.sqlite.SQLiteException`).
+## Environment
 
-Version compatibility to verify on Windows:
-- Compose Multiplatform release matching Kotlin 2.1.20 (check JetBrains' compatibility table;
-  CMP 1.8.x is the likely match — confirm before pinning).
-- Keep AGP 8.8.2 / Gradle 8.13 unless something forces an upgrade.
-
-## Open questions, deliberately not decided
-
-1. Share the UI too (Compose Multiplatform, one screen both platforms), or share only the
-   server + database and write a separate desktop UI? Recommendation: share everything —
-   it matches the stated goal.
-2. Add a GitHub Actions workflow to build both artifacts on every tag? Useful even with a
-   Windows machine available, so the APK and .exe are always built the same way.
-
-## Security note
-
-On a phone the server is one app among many; on a desktop, binding `0.0.0.0:8080` exposes it
-to the whole network and Windows Firewall will prompt on first run. Worth adding auth (even a
-static bearer token) before the desktop build leaves your LAN.
-
-## Environment on the Mac (for reference)
-
-Gradle 8.13 · AGP 8.8.2 · Kotlin 2.1.20 · Ktor 3.1.3 · Room 2.7.2 · KSP 2.1.20-2.0.1
-compileSdk 35 · minSdk 26 · JDK 17
+Gradle 8.13 · AGP 8.8.2 · Kotlin 2.1.20 · CMP 1.8.2 · Ktor 3.1.3 · Room 2.7.2
+KSP 2.1.20-2.0.1 · compileSdk 35 · minSdk 26 · JDK 17

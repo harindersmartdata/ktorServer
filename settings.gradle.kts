@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "KtorAndroidServer"
-include(":app")
+rootProject.name = "KtorServer"
+include(":composeApp")

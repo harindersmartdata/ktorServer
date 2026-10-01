@@ -1,13 +1,5 @@
-package com.example.ktorserver
+package com.example.ktorserver.ui
 
-import android.Manifest
-import android.content.Intent
-import android.os.Build
-import android.os.Bundle
-import android.provider.Settings
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,8 +23,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,43 +33,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ktorserver.data.User
 import com.example.ktorserver.server.KtorServer
-import com.example.ktorserver.service.KtorServerService
+import com.example.ktorserver.server.ServerController
 import com.example.ktorserver.util.localIpv4Address
 import kotlinx.coroutines.flow.Flow
 
-class MainActivity : ComponentActivity() {
-
-    private val notificationPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op */ }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val app = application as KtorServerApp
-
-        setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    ServerScreen(
-                        usersFlow = app.userRepository.users,
-                        databasePath = app.databasePath,
-                        onStart = { KtorServerService.start(this) },
-                        onStop = { KtorServerService.stop(this) },
-                        onOpenBatterySettings = {
-                            runCatching {
-                                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                            }
-                        },
-                    )
-                }
-            }
+/**
+ * Whole UI, shared by the APK and the Windows build.
+ *
+ * [onOpenBatterySettings] is null on desktop — battery optimisation is an Android
+ * concern, so the button only renders where it can do something.
+ */
+@Composable
+fun App(
+    controller: ServerController,
+    usersFlow: Flow<List<User>>,
+    databasePath: String,
+    onOpenBatterySettings: (() -> Unit)? = null,
+) {
+    MaterialTheme {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            ServerScreen(
+                controller = controller,
+                usersFlow = usersFlow,
+                databasePath = databasePath,
+                onOpenBatterySettings = onOpenBatterySettings,
+            )
         }
     }
 }
@@ -84,15 +67,14 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerScreen(
+    controller: ServerController,
     usersFlow: Flow<List<User>>,
     databasePath: String,
-    onStart: () -> Unit,
-    onStop: () -> Unit,
-    onOpenBatterySettings: () -> Unit,
+    onOpenBatterySettings: (() -> Unit)?,
 ) {
-    val running by KtorServerService.isRunning.collectAsStateWithLifecycle()
-    val error by KtorServerService.lastError.collectAsStateWithLifecycle()
-    val users by usersFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val running by controller.isRunning.collectAsState()
+    val error by controller.lastError.collectAsState()
+    val users by usersFlow.collectAsState(initial = emptyList())
 
     val host = localIpv4Address() ?: "127.0.0.1"
     val baseUrl = "http://$host:${KtorServer.DEFAULT_PORT}"
@@ -110,8 +92,8 @@ fun ServerScreen(
             StatusCard(running = running, baseUrl = baseUrl, error = error)
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onStart, enabled = !running) { Text("Start server") }
-                OutlinedButton(onClick = onStop, enabled = running) { Text("Stop") }
+                Button(onClick = controller::start, enabled = !running) { Text("Start server") }
+                OutlinedButton(onClick = controller::stop, enabled = running) { Text("Stop") }
             }
 
             EndpointsCard(baseUrl = baseUrl)
@@ -127,10 +109,11 @@ fun ServerScreen(
                 items(users, key = { it.id }) { user -> UserRow(user) }
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedButton(onClick = onOpenBatterySettings) {
-                Text("Battery settings (keep alive)")
+            if (onOpenBatterySettings != null) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onOpenBatterySettings) {
+                    Text("Battery settings (keep alive)")
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -197,10 +180,7 @@ private fun StorageCard(databasePath: String) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Storage", style = MaterialTheme.typography.titleSmall)
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
-            Text(
-                "Room / SQLite — survives restarts",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text("Room / SQLite — survives restarts", style = MaterialTheme.typography.bodySmall)
             Text(
                 databasePath,
                 fontFamily = FontFamily.Monospace,

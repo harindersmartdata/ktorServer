@@ -1,6 +1,5 @@
 package com.example.ktorserver.server
 
-import android.util.Log
 import com.example.ktorserver.data.CreateUserRequest
 import com.example.ktorserver.data.ErrorResponse
 import com.example.ktorserver.data.HealthResponse
@@ -8,8 +7,10 @@ import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.UsersResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
+import io.ktor.util.logging.KtorSimpleLogger
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
+import io.ktor.server.application.log
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -24,10 +25,8 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 /**
  * Wraps the embedded Ktor engine so the service only has to call [start] / [stop].
@@ -37,6 +36,8 @@ class KtorServer(
     private val port: Int = DEFAULT_PORT,
 ) {
 
+    private val logger = KtorSimpleLogger("KtorServer")
+
     private var engine: EmbeddedServer<*, *>? = null
     private var startedAt: Long = 0L
 
@@ -44,7 +45,7 @@ class KtorServer(
 
     fun start() {
         if (engine != null) return
-        startedAt = System.currentTimeMillis()
+        startedAt = Clock.System.now().toEpochMilliseconds()
         engine = embeddedServer(
             factory = CIO,
             port = port,
@@ -55,13 +56,13 @@ class KtorServer(
         ).also {
             // wait = false: never block the caller's thread.
             it.start(wait = false)
-            Log.i(TAG, "Ktor server started on port $port")
+            logger.info("Ktor server started on port $port")
         }
     }
 
     fun stop() {
         engine?.let {
-            Log.i(TAG, "Stopping Ktor server")
+            logger.info("Stopping Ktor server")
             it.stop(gracePeriodMillis = 500, timeoutMillis = 2_000)
         }
         engine = null
@@ -103,7 +104,7 @@ fun Application.apiModule(startedAt: Long, repository: UserRepository) {
             )
         }
         exception<Throwable> { call, cause ->
-            Log.e(KtorServer.TAG, "Unhandled request failure", cause)
+            call.application.log.error("Unhandled request failure", cause)
             call.respond(
                 HttpStatusCode.InternalServerError,
                 ErrorResponse("Internal server error", cause.message),
@@ -118,7 +119,7 @@ fun Application.apiModule(startedAt: Long, repository: UserRepository) {
             call.respond(
                 HealthResponse(
                     status = "UP",
-                    uptimeMillis = System.currentTimeMillis() - startedAt,
+                    uptimeMillis = Clock.System.now().toEpochMilliseconds() - startedAt,
                     userCount = repository.count(),
                     serverTime = isoNow(),
                 )
@@ -202,5 +203,5 @@ fun Application.apiModule(startedAt: Long, repository: UserRepository) {
     }
 }
 
-private fun isoNow(): String =
-    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US).format(Date())
+/** kotlinx-datetime renders ISO-8601 in UTC on every target. */
+private fun isoNow(): String = Clock.System.now().toString()

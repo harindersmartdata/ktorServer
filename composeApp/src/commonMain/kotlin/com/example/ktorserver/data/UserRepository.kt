@@ -1,6 +1,7 @@
 package com.example.ktorserver.data
 
-import android.database.sqlite.SQLiteConstraintException
+import androidx.sqlite.SQLiteException
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -30,12 +31,12 @@ class UserRepository(private val dao: UserDao) {
         val user = User(
             name = name.trim(),
             email = email.trim(),
-            createdAt = System.currentTimeMillis(),
+            createdAt = Clock.System.now().toEpochMilliseconds(),
         )
         return try {
             val id = dao.insert(user)
             user.copy(id = id.toInt())
-        } catch (_: SQLiteConstraintException) {
+        } catch (_: SQLiteException) {
             null
         }
     }

@@ -1,13 +1,13 @@
 package com.example.ktorserver.util
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
-/**
- * Best-effort local IPv4 address, so the UI can show a URL other devices can hit.
- * Returns null when the device is offline (no non-loopback IPv4 interface).
- */
-fun localIpv4Address(): String? = runCatching {
+actual val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+actual fun localIpv4Address(): String? = runCatching {
     NetworkInterface.getNetworkInterfaces()
         .asSequence()
         .filter { it.isUp && !it.isLoopback }
