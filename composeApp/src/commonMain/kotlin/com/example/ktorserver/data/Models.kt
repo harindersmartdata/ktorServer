@@ -146,6 +146,12 @@ data class ReplicationStatus(
     val peerAckedSeq: Long = 0,
     /** localSeq - peerAckedSeq: changes at risk if we died right now. */
     val unreplicated: Long = 0,
+    /** Live monitor state; null when this node is not running a monitor. */
+    val peerReachable: Boolean? = null,
+    /** Secondary only: the primary has been silent past the failure threshold. */
+    val primaryUnavailable: Boolean? = null,
+    /** False while a restarted primary is still confirming nobody outranks it. */
+    val writesEnabled: Boolean? = null,
 )
 
 /** Body of `POST /replication/role`. */

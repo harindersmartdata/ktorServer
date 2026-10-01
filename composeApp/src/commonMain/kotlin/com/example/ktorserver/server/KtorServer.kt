@@ -51,6 +51,7 @@ class KtorServer(
     private val changeLog: ChangeLogDao,
     private val writeDao: WriteDao,
     private val replicator: ChangeReplicator = NoReplication,
+    private val peerMonitor: PeerMonitor? = null,
     private val port: Int = DEFAULT_PORT,
 ) {
 
@@ -70,7 +71,7 @@ class KtorServer(
             // 0.0.0.0 makes the server reachable from other devices on the same
             // network. Use 127.0.0.1 to keep it on-device only.
             host = "0.0.0.0",
-            module = { apiModule(startedAt, repository, store, changeLog, writeDao, replicator) },
+            module = { apiModule(startedAt, repository, store, changeLog, writeDao, replicator, peerMonitor) },
         ).also {
             // wait = false: never block the caller's thread.
             it.start(wait = false)
@@ -101,6 +102,7 @@ fun Application.apiModule(
     changeLog: ChangeLogDao,
     writeDao: WriteDao,
     replicator: ChangeReplicator,
+    peerMonitor: PeerMonitor?,
 ) {
 
     install(ContentNegotiation) {
@@ -172,6 +174,11 @@ fun Application.apiModule(
                         lastAppliedSeq = state.lastAppliedSeq,
                         peerAckedSeq = state.peerAckedSeq,
                         unreplicated = (localSeq - state.peerAckedSeq).coerceAtLeast(0),
+                        peerReachable = peerMonitor?.peerReachable?.value,
+                        primaryUnavailable = peerMonitor?.primaryUnavailable?.value,
+                        writesEnabled = peerMonitor?.let {
+                            state.role == NodeRole.PRIMARY && it.startupConfirmed.value
+                        },
                     )
                 )
             }
@@ -322,7 +329,7 @@ fun Application.apiModule(
 
             // POST /users -> create a user
             post {
-                call.requirePrimary(store) ?: return@post
+                call.requirePrimary(store, peerMonitor) ?: return@post
 
                 val body = call.receive<CreateUserRequest>()
 
@@ -364,7 +371,7 @@ fun Application.apiModule(
 
             // DELETE /users/{id}
             delete("/{id}") {
-                call.requirePrimary(store) ?: return@delete
+                call.requirePrimary(store, peerMonitor) ?: return@delete
 
                 val id = call.parameters["id"]?.takeIf { it.isNotBlank() }
                     ?: return@delete call.respond(
@@ -397,9 +404,27 @@ private val replicationJson = Json { ignoreUnknownKeys = true; encodeDefaults = 
  */
 private suspend fun ApplicationCall.requirePrimary(
     store: com.example.ktorserver.data.ReplicationStore,
+    peerMonitor: PeerMonitor?,
 ): ReplicationState? {
     val state = store.current()
-    if (state.role == NodeRole.PRIMARY) return state
+
+    if (state.role == NodeRole.PRIMARY) {
+        // A restarted primary must confirm nobody was promoted while it was gone before
+        // it takes a sale. 503 rather than 421: we are probably still the primary, the
+        // client should retry here in a moment rather than go elsewhere.
+        if (peerMonitor != null && !peerMonitor.startupConfirmed.value) {
+            response.headers.append("Retry-After", "1")
+            respond(
+                HttpStatusCode.ServiceUnavailable,
+                ErrorResponse(
+                    "Confirming replication state with peer",
+                    "This node restarted and is checking whether it is still the primary",
+                ),
+            )
+            return null
+        }
+        return state
+    }
 
     respond(
         HttpStatusCode(421, "Misdirected Request"),

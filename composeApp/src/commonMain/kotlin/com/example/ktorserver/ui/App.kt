@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.User
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.server.ServerController
@@ -50,6 +52,7 @@ fun App(
     controller: ServerController,
     usersFlow: Flow<List<User>>,
     databasePath: String,
+    replication: ReplicationUi? = null,
     onOpenBatterySettings: (() -> Unit)? = null,
 ) {
     MaterialTheme {
@@ -58,6 +61,7 @@ fun App(
                 controller = controller,
                 usersFlow = usersFlow,
                 databasePath = databasePath,
+                replication = replication,
                 onOpenBatterySettings = onOpenBatterySettings,
             )
         }
@@ -70,6 +74,7 @@ fun ServerScreen(
     controller: ServerController,
     usersFlow: Flow<List<User>>,
     databasePath: String,
+    replication: ReplicationUi?,
     onOpenBatterySettings: (() -> Unit)?,
 ) {
     val running by controller.isRunning.collectAsState()
@@ -90,6 +95,8 @@ fun ServerScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             StatusCard(running = running, baseUrl = baseUrl, error = error)
+
+            if (replication != null) ReplicationCard(replication)
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = controller::start, enabled = !running) { Text("Start server") }
@@ -117,6 +124,92 @@ fun ServerScreen(
             }
 
             Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+/**
+ * Shows the node's role and whether the peer is answering, and surfaces the promotion
+ * button when the primary has gone silent.
+ *
+ * The button is the whole point of the failure detector: the software reports what it
+ * can see and a person decides. A silent primary and a cut network look identical from
+ * here, and promoting automatically on that evidence is how both terminals end up
+ * taking sales at the same time.
+ */
+@Composable
+private fun ReplicationCard(replication: ReplicationUi) {
+    val state by replication.state.collectAsState(initial = null)
+    val peerUp by replication.peerReachable.collectAsState()
+    val primaryGone by replication.primaryUnavailable.collectAsState()
+    val confirmed by replication.startupConfirmed.collectAsState()
+
+    val role = state?.role ?: NodeRole.UNCONFIGURED
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (primaryGone) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+        ),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Replication", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    "${'$'}{role.name} · epoch ${'$'}{state?.epoch ?: 0}",
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            HorizontalDivider(Modifier.padding(vertical = 2.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(8.dp).clip(CircleShape),
+                    color = if (peerUp) Color(0xFF1B9C5B) else Color(0xFFC62828),
+                ) {}
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    text = if (peerUp) "Peer responding" else "Peer not responding",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            state?.peerAddress?.let {
+                Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            }
+
+            if (role == NodeRole.PRIMARY && !confirmed) {
+                Text(
+                    "Checking with the peer before accepting writes…",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            if (primaryGone) {
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    "Primary server is not responding.",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Promote this terminal only if you are sure the primary is really " +
+                        "down. If it is still running elsewhere, both will take sales.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Button(
+                    onClick = replication.onPromote,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Make this terminal primary") }
+            }
         }
     }
 }

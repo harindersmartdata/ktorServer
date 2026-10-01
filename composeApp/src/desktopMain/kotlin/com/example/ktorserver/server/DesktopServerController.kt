@@ -22,10 +22,12 @@ class DesktopServerController(
     changeLog: ChangeLogDao,
     writeDao: WriteDao,
     private val replicator: ChangeReplicator = NoReplication,
+    private val monitor: PeerMonitor? = null,
     port: Int = KtorServer.DEFAULT_PORT,
 ) : ServerController {
 
-    private val server = KtorServer(repository, store, changeLog, writeDao, replicator, port)
+    private val server =
+        KtorServer(repository, store, changeLog, writeDao, replicator, monitor, port)
 
     /** Outlives individual requests: the catch-up loop runs for the server's lifetime. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -44,6 +46,8 @@ class DesktopServerController(
                 _lastError.value = null
                 // Drains anything the peer missed while it was away.
                 (replicator as? HttpChangeReplicator)?.startCatchUp(scope)
+                // Probes the peer so liveness is observed rather than assumed.
+                monitor?.start(scope)
             }
             .onFailure { error ->
                 // Port already taken is the common one — surface it instead of dying.
@@ -54,6 +58,7 @@ class DesktopServerController(
 
     override fun stop() {
         runCatching { server.stop() }
+        monitor?.close()
         scope.cancel()
         _isRunning.value = false
     }

@@ -9,7 +9,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.ktorserver.server.AndroidServerController
+import androidx.lifecycle.lifecycleScope
 import com.example.ktorserver.ui.App
+import com.example.ktorserver.ui.ReplicationUi
+import kotlinx.coroutines.launch
 
 /** Thin host for the shared [App] composable. */
 class MainActivity : ComponentActivity() {
@@ -31,6 +34,13 @@ class MainActivity : ComponentActivity() {
                 controller = AndroidServerController(this),
                 usersFlow = app.userRepository.users,
                 databasePath = app.databasePath,
+                replication = ReplicationUi(
+                    state = app.replicationStore.observe(),
+                    peerReachable = app.peerMonitor.peerReachable,
+                    primaryUnavailable = app.peerMonitor.primaryUnavailable,
+                    startupConfirmed = app.peerMonitor.startupConfirmed,
+                    onPromote = { lifecycleScope.launch { app.replicationStore.promote() } },
+                ),
                 onOpenBatterySettings = {
                     runCatching {
                         startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))

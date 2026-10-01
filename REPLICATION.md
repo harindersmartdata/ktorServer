@@ -32,10 +32,8 @@ network gear is out.
       writes rejected on a secondary with `421` + the primary's address; epoch adopted
       from the peer so a promotion always out-ranks the old primary; a superseded
       primary stands down on hearing a higher epoch.
-      **Known window:** a returning primary accepts writes until it hears the higher
-      epoch. Those writes are stamped with the stale epoch in `change_log`, which is
-      how step 7 will find them. Closing the window is step 4 (confirm epoch with the
-      peer before serving).
+      (The window this left open — a returning primary accepting writes before hearing
+      the higher epoch — was closed in step 4.)
 - [x] **3. Synchronous replication** — `POST /replication/apply` receives batches; the
       primary pushes and waits for the ack before answering the client. Degrades per
       decision 1a: an unreachable peer does not block the till, the backlog stays in
@@ -46,7 +44,15 @@ network gear is out.
       **Known gap:** the local write commits *before* replication is attempted, so a
       write the peer later rejects is already durable locally. True no-loss would need
       two-phase commit; as built, such a write becomes an orphan for step 7 to reconcile.
-- [ ] **4. Health + failure detection** — heartbeats, honest liveness, timeout tuning.
+- [x] **4. Health + failure detection** — both nodes probe each other every 2s via
+      `/replication/heartbeat`, exchanging epochs in one round trip. A secondary raises
+      `primaryUnavailable` after 10s of silence and the UI offers a promotion button;
+      promotion stays a human decision, because a partition and a dead primary look
+      identical from here. **Closes step 2's window:** a restarted node will not accept
+      writes until it has confirmed its epoch with the peer (503 + Retry-After), or the
+      5s grace expires with the peer unreachable.
+      **Remaining:** a recovered node is a secondary but still missing whatever was
+      written while it was away — reverse catch-up is step 7.
 - [ ] **5. Manual promotion** — bump epoch, guard against split-brain.
 - [ ] **6. Client redirection** — `421` + primary address; client-side candidate list.
 - [ ] **7. Recovery + re-sync** — demote a stale returning node, catch it up, bootstrap
@@ -76,7 +82,7 @@ Per decision 1a, a slow or dead T2 must not stop the till, so the sync guarantee
 conditional. Whatever the UI does with that, the lag must be tracked internally or
 catch-up cannot work.
 
-### Failure detection — *step 4*
+### Failure detection — *step 4 (done)*
 Timeout tuning is a real trade-off: too short and a Wi-Fi hiccup causes a false
 failover, too long and tills are unusable for minutes. Also: if T2, T3 and T4 each
 decide independently that T1 is dead, they can disagree about who is primary.
@@ -97,10 +103,11 @@ the primary offline.
 Currently none. A replication endpoint means anyone on the LAN can push rows into the
 database; a promotion endpoint means anyone can promote themselves.
 
-### Android reliability — *step 4*
+### Android reliability — *step 4 (partly done)*
 OEM battery management (Xiaomi, Oppo, Vivo) kills foreground services. **A secondary
 that is silently dead is worse than no secondary** — you believe you are protected and
-you are not. Liveness must be reported, never assumed.
+you are not. Liveness must be reported, never assumed. The monitor actively probes rather than
+waiting to be told, so a reaped process is detected within the failure threshold.
 
 ## Notes
 
