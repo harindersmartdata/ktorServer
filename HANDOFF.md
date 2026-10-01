@@ -64,6 +64,44 @@ foreground service, desktop calls the engine directly. The UI only sees the inte
    "must be on Windows" bottleneck for releases.
 2. Auth before this leaves a LAN (a static bearer token would do).
 
+
+## iOS — investigated, deliberately not taken
+
+Asked for as a foreground-only internal test build. The code is written and sits on
+branch `feature/ios-target`; it does **not** compile on Kotlin 2.1.20 and cannot be
+made to. The versions are mutually exclusive:
+
+| | On Kotlin 2.1.20 |
+|---|---|
+| Room 2.7.2 | KSP2 processor fails on native: `cannot find required type kotlin.coroutines.Continuation` |
+| KSP1 fallback | not viable — cannot load the native compiler on Kotlin 2.1.20 |
+| Room 2.8.5 | processor works, but its klib is ABI 2.2.0; 2.1.20 consumes only <= 1.201.0 |
+
+iOS therefore requires **Kotlin 2.2.x**, which forces **Compose Multiplatform 1.9.x**
+and a matching KSP. That re-versions the verified Android and Windows builds, so it
+was not taken.
+
+What is already done on that branch, and would be reused:
+- `iosMain` with a Compose `MainViewController`, Room opening in `NSDocumentDirectory`,
+  and `localIpv4Address()` rewritten over `getifaddrs` — Kotlin/Native has no
+  `java.net.NetworkInterface`.
+- `DirectServerController` moved to commonMain so iOS and desktop share it.
+- iosX64/iosArm64/iosSimulatorArm64 targets and their KSP configurations.
+
+Still missing even after a successful compile: an Xcode project to host the framework.
+
+**Remember iOS can only serve in the foreground.** The OS suspends a backgrounded app
+and the listening socket dies with it; there is no foreground-service equivalent. Fine
+for internal testing, not viable as a till.
+
+## Local environment notes (macOS machine)
+
+- Kotlin/Native 2.1.20 was missing from `~/.konan` and has now been installed
+  (940 MB, `macos-x86_64`). Any native build needs it.
+- **The installed JDK is x86_64 (OpenLogic 17.0.10) on an arm64 Mac**, so it runs under
+  Rosetta and pulls the x86_64 native toolchain. Everything works, but native compiles
+  are emulated and slow. An arm64 JDK 17 is the supported setup if iOS is revived.
+
 ## Environment
 
 Gradle 8.13 · AGP 8.8.2 · Kotlin 2.1.20 · CMP 1.8.2 · Ktor 3.1.3 · Room 2.7.2
