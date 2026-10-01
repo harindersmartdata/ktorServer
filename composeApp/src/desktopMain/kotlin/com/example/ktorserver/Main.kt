@@ -11,6 +11,7 @@ import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.data.databaseFile
 import com.example.ktorserver.server.DesktopServerController
+import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.ui.App
 
@@ -28,8 +29,18 @@ fun main() = application {
     val port = remember {
         System.getenv("TUCOUNT_PORT")?.toIntOrNull() ?: KtorServer.DEFAULT_PORT
     }
+    val replicator = remember {
+        HttpChangeReplicator(store, database.changeLogDao())
+    }
     val controller = remember {
-        DesktopServerController(repository, store, database.changeLogDao(), port)
+        DesktopServerController(
+            repository = repository,
+            store = store,
+            changeLog = database.changeLogDao(),
+            writeDao = database.writeDao(),
+            replicator = replicator,
+            port = port,
+        )
     }
 
     // A till should be serving the moment the machine finishes booting — nobody is

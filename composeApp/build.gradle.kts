@@ -48,6 +48,12 @@ kotlin {
             implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
             implementation("io.ktor:ktor-server-cors:$ktorVersion")
 
+            // The primary is also a client: it pushes changes to the secondary.
+            // CIO is the one engine that works unchanged on Android and desktop.
+            implementation("io.ktor:ktor-client-core:$ktorVersion")
+            implementation("io.ktor:ktor-client-cio:$ktorVersion")
+            implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+
             // Room 2.7 ships multiplatform artifacts; sqlite-bundled supplies the
             // native SQLite build so desktop needs no system library.
             implementation("androidx.room:room-runtime:$roomVersion")

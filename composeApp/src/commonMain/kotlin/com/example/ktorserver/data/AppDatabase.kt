@@ -14,7 +14,7 @@ const val DATABASE_NAME = "ktor-server.db"
 
 @Database(
     entities = [User::class, ChangeLogEntry::class, ReplicationState::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -111,6 +111,15 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+/** v3 -> v4: tracks how far the peer has acknowledged our changes. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "ALTER TABLE replication_state ADD COLUMN peerAckedSeq INTEGER NOT NULL DEFAULT 0"
+        )
+    }
+}
+
 /**
  * Shared tail of the builder chain.
  *
@@ -122,5 +131,5 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 fun RoomDatabase.Builder<AppDatabase>.configureAndBuild(): AppDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(ioDispatcher)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .build()

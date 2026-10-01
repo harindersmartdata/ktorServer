@@ -113,4 +113,11 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
      * instead of replaying from the beginning.
      */
     suspend fun recordApplied(peerNodeId: String, seq: Long) = dao.recordApplied(peerNodeId, seq)
+
+    /**
+     * Records how far the peer has confirmed storing OUR changes.
+     *
+     * Everything above this is unreplicated and would be lost if we failed right now.
+     */
+    suspend fun recordPeerAck(seq: Long) = dao.recordPeerAck(seq)
 }

@@ -35,6 +35,8 @@ class KtorServerService : Service() {
             repository = app.userRepository,
             store = app.replicationStore,
             changeLog = app.changeLogDao,
+            writeDao = app.writeDao,
+            replicator = app.replicator,
             port = KtorServer.DEFAULT_PORT,
         )
     }

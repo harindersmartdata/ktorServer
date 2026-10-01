@@ -63,12 +63,13 @@ class UserRepository(
 
     suspend fun delete(id: String): Boolean {
         val state = store.current()
+        // -1 means the row was not there, so nothing was logged either.
         return writeDao.deleteUserLogged(
             id = id,
             nodeId = state.nodeId,
             epoch = state.epoch,
             txId = Uuid.random().toString(),
             now = Clock.System.now().toEpochMilliseconds(),
-        )
+        ) != -1L
     }
 }

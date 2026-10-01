@@ -4,6 +4,7 @@ import android.app.Application
 import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
+import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.data.databasePath
 
 /**
@@ -23,6 +24,10 @@ class KtorServerApp : Application() {
     }
 
     val changeLogDao by lazy { database.changeLogDao() }
+
+    val writeDao by lazy { database.writeDao() }
+
+    val replicator by lazy { HttpChangeReplicator(replicationStore, changeLogDao) }
 
     val databasePath: String by lazy { databasePath(this) }
 }

@@ -36,8 +36,16 @@ network gear is out.
       epoch. Those writes are stamped with the stale epoch in `change_log`, which is
       how step 7 will find them. Closing the window is step 4 (confirm epoch with the
       peer before serving).
-- [ ] **3. Synchronous replication** — ship the log to the peer, wait for ack, track the
-      acked high-water mark, degrade per decision 1a.
+- [x] **3. Synchronous replication** — `POST /replication/apply` receives batches; the
+      primary pushes and waits for the ack before answering the client. Degrades per
+      decision 1a: an unreachable peer does not block the till, the backlog stays in
+      `change_log`, and a catch-up loop drains it when the peer returns. Applying is
+      idempotent (keyed on `nodeId, seq`) so a retry after a timeout is harmless, and a
+      batch applies in one transaction so a multi-table sale cannot half-land.
+      `/replication/status` reports `unreplicated`.
+      **Known gap:** the local write commits *before* replication is attempted, so a
+      write the peer later rejects is already durable locally. True no-loss would need
+      two-phase commit; as built, such a write becomes an orphan for step 7 to reconcile.
 - [ ] **4. Health + failure detection** — heartbeats, honest liveness, timeout tuning.
 - [ ] **5. Manual promotion** — bump epoch, guard against split-brain.
 - [ ] **6. Client redirection** — `421` + primary address; client-side candidate list.
@@ -63,7 +71,7 @@ higher epoch than its own must stop accepting writes immediately. Implemented in
 and demonstrated end to end, including a returning primary standing down. It bounds the
 damage rather than eliminating it: see the window noted against step 2.
 
-### Sync cost — *step 3*
+### Sync cost — *step 3 (done)*
 Per decision 1a, a slow or dead T2 must not stop the till, so the sync guarantee is
 conditional. Whatever the UI does with that, the lag must be tracked internally or
 catch-up cannot work.

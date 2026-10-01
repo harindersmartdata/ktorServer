@@ -1,12 +1,17 @@
 package com.example.ktorserver.server
 
+import com.example.ktorserver.data.ApplyChangesRequest
+import com.example.ktorserver.data.ApplyChangesResponse
 import com.example.ktorserver.data.ChangeLogDao
 import com.example.ktorserver.data.ConfigureRoleRequest
 import com.example.ktorserver.data.HeartbeatRequest
 import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.NotPrimaryResponse
 import com.example.ktorserver.data.ReplicationState
+import com.example.ktorserver.data.PreparedChange
 import com.example.ktorserver.data.ReplicationStatus
+import com.example.ktorserver.data.User
+import com.example.ktorserver.data.WriteDao
 import com.example.ktorserver.data.CreateUserRequest
 import com.example.ktorserver.data.ErrorResponse
 import com.example.ktorserver.data.HealthResponse
@@ -44,6 +49,8 @@ class KtorServer(
     private val repository: UserRepository,
     private val store: ReplicationStore,
     private val changeLog: ChangeLogDao,
+    private val writeDao: WriteDao,
+    private val replicator: ChangeReplicator = NoReplication,
     private val port: Int = DEFAULT_PORT,
 ) {
 
@@ -63,7 +70,7 @@ class KtorServer(
             // 0.0.0.0 makes the server reachable from other devices on the same
             // network. Use 127.0.0.1 to keep it on-device only.
             host = "0.0.0.0",
-            module = { apiModule(startedAt, repository, store, changeLog) },
+            module = { apiModule(startedAt, repository, store, changeLog, writeDao, replicator) },
         ).also {
             // wait = false: never block the caller's thread.
             it.start(wait = false)
@@ -92,6 +99,8 @@ fun Application.apiModule(
     repository: UserRepository,
     store: ReplicationStore,
     changeLog: ChangeLogDao,
+    writeDao: WriteDao,
+    replicator: ChangeReplicator,
 ) {
 
     install(ContentNegotiation) {
@@ -151,6 +160,7 @@ fun Application.apiModule(
 
             get("/status") {
                 val state = store.current()
+                val localSeq = changeLog.latestSeq(state.nodeId)
                 call.respond(
                     ReplicationStatus(
                         nodeId = state.nodeId,
@@ -158,8 +168,10 @@ fun Application.apiModule(
                         epoch = state.epoch,
                         peerAddress = state.peerAddress,
                         peerNodeId = state.peerNodeId,
-                        localSeq = changeLog.latestSeq(state.nodeId),
+                        localSeq = localSeq,
                         lastAppliedSeq = state.lastAppliedSeq,
+                        peerAckedSeq = state.peerAckedSeq,
+                        unreplicated = (localSeq - state.peerAckedSeq).coerceAtLeast(0),
                     )
                 )
             }
@@ -211,6 +223,56 @@ fun Application.apiModule(
                         epoch = state.epoch,
                         peerAddress = state.peerAddress,
                         peerNodeId = state.peerNodeId,
+                    )
+                )
+            }
+
+            /**
+             * Receives a batch of changes from the primary.
+             *
+             * Safe to call twice with the same batch: applyBatch keys off (nodeId, seq)
+             * and skips anything already stored, so the sender can retry a request that
+             * timed out after it actually succeeded.
+             */
+            post("/apply") {
+                val body = call.receive<ApplyChangesRequest>()
+
+                // Adopt a higher epoch before deciding anything: if the sender has been
+                // promoted since we last heard, it is the authority now.
+                val state = store.observeEpoch(body.epoch, body.nodeId)
+
+                if (body.epoch < state.epoch) {
+                    // A superseded primary is trying to write to us. Refuse, and tell it
+                    // the current epoch so it stands down.
+                    call.application.log.warn(
+                        "Rejected batch from ${body.nodeId}: epoch ${body.epoch} < ours ${state.epoch}"
+                    )
+                    return@post call.respond(
+                        HttpStatusCode.Conflict,
+                        ApplyChangesResponse(
+                            accepted = false,
+                            appliedThroughSeq = state.lastAppliedSeq,
+                            epoch = state.epoch,
+                            reason = "superseded: this node is at epoch ${state.epoch}",
+                        ),
+                    )
+                }
+
+                val prepared = body.entries.map { entry ->
+                    PreparedChange(
+                        entry = entry,
+                        row = entry.payload?.let { replicationJson.decodeFromString<User>(it) },
+                    )
+                }
+
+                val appliedThrough = writeDao.applyBatch(prepared)
+                if (appliedThrough > 0) store.recordApplied(body.nodeId, appliedThrough)
+
+                call.respond(
+                    ApplyChangesResponse(
+                        accepted = true,
+                        appliedThroughSeq = appliedThrough,
+                        epoch = state.epoch,
                     )
                 )
             }
@@ -291,6 +353,12 @@ fun Application.apiModule(
                         ErrorResponse("A user with email $email already exists"),
                     )
 
+                // Synchronous replication: wait for the secondary to confirm before
+                // telling the caller the sale is committed. A false return means the
+                // peer was unreachable; by agreed policy we still confirm and let the
+                // catch-up loop deliver it.
+                replicator.push()
+
                 call.respond(HttpStatusCode.Created, created)
             }
 
@@ -305,6 +373,7 @@ fun Application.apiModule(
                     )
 
                 if (repository.delete(id)) {
+                    replicator.push()
                     call.respond(HttpStatusCode.NoContent)
                 } else {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("No user with id $id"))
@@ -313,6 +382,9 @@ fun Application.apiModule(
         }
     }
 }
+
+/** Shared by the apply endpoint; kept lenient so a newer peer can add fields. */
+private val replicationJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
 /**
  * Rejects a write unless this node is the primary.

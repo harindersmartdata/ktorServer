@@ -20,7 +20,14 @@ interface ReplicationStateDao {
 
     @Query(
         "UPDATE replication_state SET lastAppliedNodeId = :nodeId, lastAppliedSeq = :seq " +
-            "WHERE id = ${ReplicationState.SINGLETON_ID}"
+            "WHERE id = ${ReplicationState.SINGLETON_ID} AND :seq > lastAppliedSeq"
     )
     suspend fun recordApplied(nodeId: String, seq: Long)
+
+    /** Never moves backwards: a late reply must not undo a later ack. */
+    @Query(
+        "UPDATE replication_state SET peerAckedSeq = :seq " +
+            "WHERE id = ${ReplicationState.SINGLETON_ID} AND :seq > peerAckedSeq"
+    )
+    suspend fun recordPeerAck(seq: Long)
 }

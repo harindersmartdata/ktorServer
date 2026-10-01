@@ -91,6 +91,13 @@ data class ReplicationState(
     val peerAddress: String? = null,
     /** Learned on first contact; lets us tell a client who the real primary is. */
     val peerNodeId: String? = null,
+    /**
+     * Highest seq of OUR changes the peer has confirmed storing.
+     *
+     * Everything above this is unreplicated. It is the queue depth after a degraded
+     * write, and the resume point when the peer comes back.
+     */
+    val peerAckedSeq: Long = 0L,
 ) {
     companion object { const val SINGLETON_ID = 1 }
 }
@@ -135,6 +142,10 @@ data class ReplicationStatus(
     val localSeq: Long = 0,
     /** Highest peer seq this node has applied. */
     val lastAppliedSeq: Long = 0,
+    /** Highest of OUR seqs the peer has confirmed. */
+    val peerAckedSeq: Long = 0,
+    /** localSeq - peerAckedSeq: changes at risk if we died right now. */
+    val unreplicated: Long = 0,
 )
 
 /** Body of `POST /replication/role`. */
@@ -169,4 +180,29 @@ data class NotPrimaryResponse(
 data class HeartbeatRequest(
     val nodeId: String,
     val epoch: Long,
+)
+
+// ---- Replication transport --------------------------------------------------
+
+/**
+ * A batch of changes pushed from primary to secondary.
+ *
+ * [epoch] is the authority the sender claims. A receiver that is already past it
+ * rejects the batch rather than letting a superseded primary write to it.
+ */
+@Serializable
+data class ApplyChangesRequest(
+    val nodeId: String,
+    val epoch: Long,
+    val entries: List<ChangeLogEntry>,
+)
+
+@Serializable
+data class ApplyChangesResponse(
+    val accepted: Boolean,
+    /** Highest seq from the sender that the receiver now holds. */
+    val appliedThroughSeq: Long,
+    /** The receiver's epoch, so a stale sender learns it has been superseded. */
+    val epoch: Long,
+    val reason: String? = null,
 )
