@@ -126,7 +126,7 @@ class PeerMonitor(
             val status: ReplicationStatus =
                 client.post("http://$peer/replication/heartbeat") {
                     contentType(ContentType.Application.Json)
-                    setBody(HeartbeatRequest(state.nodeId, state.epoch))
+                    setBody(HeartbeatRequest(state.nodeId, state.epoch, state.role.name))
                 }.body()
 
             _lastContactAt.value = now
@@ -136,7 +136,7 @@ class PeerMonitor(
 
             // The reply carries the peer's epoch. If it outranks ours we stand down here,
             // before the write guard is ever consulted.
-            val after = store.observeEpoch(status.epoch, status.nodeId)
+            val after = store.observePeer(status.epoch, status.role, status.nodeId)
             if (state.role == NodeRole.PRIMARY && after.role != NodeRole.PRIMARY) {
                 logger.warn("Stood down: peer is at epoch ${status.epoch}")
             }
@@ -173,7 +173,7 @@ class PeerMonitor(
         return try {
             client.post("http://$peer/replication/heartbeat") {
                 contentType(ContentType.Application.Json)
-                setBody(HeartbeatRequest(state.nodeId, state.epoch))
+                setBody(HeartbeatRequest(state.nodeId, state.epoch, state.role.name))
             }.body<ReplicationStatus>()
         } catch (cause: Exception) {
             logger.debug("Probe of $peer failed (${cause::class.simpleName})")

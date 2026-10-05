@@ -43,10 +43,18 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
     suspend fun configure(role: NodeRole, peerAddress: String?): ReplicationState {
         val state = current()
         val epoch = if (role == NodeRole.PRIMARY && state.epoch == 0L) 1L else state.epoch
+
+        // Pointing at a DIFFERENT peer means a peer that has never seen any of our
+        // changes. Keeping the old ack counter would silently skip everything before
+        // it, leaving a brand-new secondary permanently missing the back catalogue.
+        val peerChanged = peerAddress != null && peerAddress != state.peerAddress
+
         val next = state.copy(
             role = role,
             epoch = epoch,
             peerAddress = peerAddress ?: state.peerAddress,
+            peerNodeId = if (peerChanged) null else state.peerNodeId,
+            peerAckedSeq = if (peerChanged) 0L else state.peerAckedSeq,
         )
         dao.put(next)
         return next
@@ -103,6 +111,36 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
 
         if (incomingEpoch <= withPeer.epoch) return withPeer
         return demote(incomingEpoch)
+    }
+
+    /**
+     * Full peer observation: epoch **and** role.
+     *
+     * [observeEpoch] alone cannot break a tie. If two nodes end up claiming primary at
+     * the same epoch — which a careless role change can cause — neither sees an epoch
+     * *higher* than its own, so neither stands down and the split never heals. Both
+     * terminals then keep taking sales forever.
+     *
+     * The tie is broken deterministically on node id: the larger id yields. Both sides
+     * compute the same answer from the same two values, so exactly one demotes without
+     * any negotiation.
+     */
+    suspend fun observePeer(
+        incomingEpoch: Long,
+        incomingRole: String?,
+        fromNodeId: String?,
+    ): ReplicationState {
+        val state = observeEpoch(incomingEpoch, fromNodeId)
+
+        val bothClaimPrimary = state.role == NodeRole.PRIMARY &&
+            incomingRole == NodeRole.PRIMARY.name &&
+            incomingEpoch == state.epoch &&
+            fromNodeId != null
+
+        if (bothClaimPrimary && state.nodeId > fromNodeId!!) {
+            return demote(state.epoch)
+        }
+        return state
     }
 
     /** True when this node may accept writes. */

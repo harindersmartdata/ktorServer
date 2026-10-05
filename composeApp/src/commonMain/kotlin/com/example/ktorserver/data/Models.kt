@@ -180,10 +180,16 @@ data class ReplicationStatus(
     val writesEnabled: Boolean? = null,
 )
 
-/** Body of `POST /replication/role`. */
+/**
+ * Body of `POST /replication/role`.
+ *
+ * [role] is optional so the peer address can be corrected without touching the role —
+ * repointing a demoted terminal at the terminal that replaced it must not be blocked by
+ * the guard that stops a secondary promoting itself.
+ */
 @Serializable
 data class ConfigureRoleRequest(
-    val role: String,
+    val role: String? = null,
     val peerAddress: String? = null,
 )
 
@@ -212,6 +218,8 @@ data class NotPrimaryResponse(
 data class HeartbeatRequest(
     val nodeId: String,
     val epoch: Long,
+    /** Needed to spot two nodes claiming primary at the SAME epoch. */
+    val role: String? = null,
 )
 
 // ---- Replication transport --------------------------------------------------
@@ -263,4 +271,23 @@ data class PromotionRefused(
     val ourEpoch: Long,
     val hint: String = "Pass force=true to promote anyway. Both terminals will accept " +
         "sales until the other one is told to stand down.",
+)
+
+/**
+ * Changes this node originated that the peer never confirmed.
+ *
+ * On a primary these are simply the replication backlog. On a node that has since been
+ * demoted they are **orphans**: sales taken while it believed it was in charge, which
+ * the terminal that superseded it has never seen. Nothing merges them automatically —
+ * two tills can easily hold different versions of the same order, and picking a winner
+ * by timestamp loses money.
+ */
+@Serializable
+data class OrphanReport(
+    val nodeId: String,
+    val role: String,
+    val epoch: Long,
+    val count: Int,
+    val entries: List<ChangeLogEntry>,
+    val note: String,
 )

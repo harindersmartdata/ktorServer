@@ -41,6 +41,14 @@ interface ChangeReplicator {
      */
     suspend fun push(): Boolean
 
+    /**
+     * Pushes our unacknowledged changes even though we are no longer primary.
+     *
+     * Used to hand orphans to the node that superseded us. Separate from [push] because
+     * it deliberately ignores the role check that normally stops a secondary writing.
+     */
+    suspend fun handOver(): Boolean
+
     fun close()
 }
 
@@ -49,6 +57,7 @@ object NoReplication : ChangeReplicator {
     override val pending = MutableStateFlow(0L).asStateFlow()
     override val peerReachable = MutableStateFlow(true).asStateFlow()
     override suspend fun push(): Boolean = true
+    override suspend fun handOver(): Boolean = true
     override fun close() = Unit
 }
 
@@ -92,10 +101,14 @@ class HttpChangeReplicator(
     private val _peerReachable = MutableStateFlow(true)
     override val peerReachable: StateFlow<Boolean> = _peerReachable.asStateFlow()
 
-    override suspend fun push(): Boolean {
+    override suspend fun push(): Boolean = send(requirePrimary = true)
+
+    override suspend fun handOver(): Boolean = send(requirePrimary = false)
+
+    private suspend fun send(requirePrimary: Boolean): Boolean {
         val state = store.current()
         val peer = state.peerAddress ?: return true
-        if (state.role != NodeRole.PRIMARY) return true
+        if (requirePrimary && state.role != NodeRole.PRIMARY) return true
 
         val entries = changeLog.since(state.nodeId, state.peerAckedSeq)
         if (entries.isEmpty()) {
@@ -112,7 +125,7 @@ class HttpChangeReplicator(
             // The peer's answer carries its epoch. If it is ahead of us we have been
             // superseded and must stop writing — the ack path doubles as a fencing check.
             val after = store.observeEpoch(response.epoch, null)
-            if (after.role != NodeRole.PRIMARY) {
+            if (requirePrimary && after.role != NodeRole.PRIMARY) {
                 logger.warn("Peer is at epoch ${response.epoch}; stood down")
                 _peerReachable.value = true
                 return false
@@ -133,7 +146,13 @@ class HttpChangeReplicator(
             // and the catch-up loop retries.
             _pending.value = changeLog.pendingSince(state.nodeId, state.peerAckedSeq)
             _peerReachable.value = false
-            logger.debug("Peer unreachable (${cause::class.simpleName}); queued ${_pending.value}")
+            if (requirePrimary) {
+                // Routine while the peer is down; noisy if logged loudly.
+                logger.debug("Peer unreachable (${cause::class.simpleName}); queued ${_pending.value}")
+            } else {
+                // An operator asked for this one, so a failure must be explainable.
+                logger.warn("Handover failed: ${cause::class.simpleName}: ${cause.message}")
+            }
             false
         }
     }

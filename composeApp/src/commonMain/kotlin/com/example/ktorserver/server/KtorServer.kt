@@ -7,6 +7,7 @@ import com.example.ktorserver.data.ConfigureRoleRequest
 import com.example.ktorserver.data.HeartbeatRequest
 import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.NotPrimaryResponse
+import com.example.ktorserver.data.OrphanReport
 import com.example.ktorserver.data.ReplicationState
 import com.example.ktorserver.data.PreparedChange
 import com.example.ktorserver.data.PromoteRequest
@@ -199,11 +200,33 @@ fun Application.apiModule(
             // Operator setup: declare this node primary or secondary.
             post("/role") {
                 val body = call.receive<ConfigureRoleRequest>()
-                val role = runCatching { NodeRole.valueOf(body.role.uppercase()) }.getOrNull()
-                    ?: return@post call.respond(
-                        HttpStatusCode.BadRequest,
-                        ErrorResponse("role must be PRIMARY, SECONDARY or UNCONFIGURED"),
+                val current = store.current()
+
+                // Omitting the role updates only the peer address.
+                val role = body.role?.let { raw ->
+                    runCatching { NodeRole.valueOf(raw.uppercase()) }.getOrNull()
+                        ?: return@post call.respond(
+                            HttpStatusCode.BadRequest,
+                            ErrorResponse("role must be PRIMARY, SECONDARY or UNCONFIGURED"),
+                        )
+                } ?: current.role
+
+                // Becoming primary is a promotion, and promotions have a safety check.
+                // Letting this endpoint hand out the primary role would route around it,
+                // which is how two nodes end up claiming the same epoch with no way back.
+                if (role == NodeRole.PRIMARY &&
+                    current.role == NodeRole.SECONDARY
+                ) {
+                    return@post call.respond(
+                        HttpStatusCode.Conflict,
+                        ErrorResponse(
+                            "Use /replication/promote to make a secondary the primary",
+                            "Setting the role directly skips the check that the other " +
+                                "terminal has stood down. To correct the peer address, " +
+                                "send peerAddress without a role.",
+                        ),
                     )
+                }
 
                 val state = store.configure(role, body.peerAddress)
                 call.respond(
@@ -227,7 +250,7 @@ fun Application.apiModule(
             post("/heartbeat") {
                 val body = call.receive<HeartbeatRequest>()
                 val before = store.current()
-                val state = store.observeEpoch(body.epoch, body.nodeId)
+                val state = store.observePeer(body.epoch, body.role, body.nodeId)
 
                 if (before.role == NodeRole.PRIMARY && state.role != NodeRole.PRIMARY) {
                     call.application.log.warn(
@@ -336,6 +359,85 @@ fun Application.apiModule(
                         )
                     )
                 }
+            }
+
+            /**
+             * What this node holds that the peer has never confirmed.
+             *
+             * On a primary this is the ordinary backlog. On a demoted node these are
+             * orphans — sales it took while it thought it was in charge — and they are
+             * reported, never merged silently.
+             */
+            get("/orphans") {
+                val state = store.current()
+                val entries = changeLog.since(state.nodeId, state.peerAckedSeq)
+                val demoted = state.role != NodeRole.PRIMARY
+
+                call.respond(
+                    OrphanReport(
+                        nodeId = state.nodeId,
+                        role = state.role.name,
+                        epoch = state.epoch,
+                        count = entries.size,
+                        entries = entries,
+                        note = when {
+                            entries.isEmpty() -> "Nothing outstanding."
+                            demoted -> "This terminal is no longer primary. These " +
+                                "changes were taken while it believed it was, and the " +
+                                "current primary has not seen them. Review before " +
+                                "handing them over."
+                            else -> "Normal replication backlog; the peer is behind."
+                        },
+                    )
+                )
+            }
+
+            /**
+             * Hands the orphans to the current primary, on the operator's say-so.
+             *
+             * Deliberately explicit. An orphaned INSERT can resurrect a row the new
+             * primary deliberately deleted, and an orphaned sale may duplicate one that
+             * was re-rung on the other till. Somebody has to look first.
+             */
+            post("/orphans/handover") {
+                val state = store.current()
+                val outstanding = changeLog.since(state.nodeId, state.peerAckedSeq)
+
+                if (outstanding.isEmpty()) {
+                    return@post call.respond(
+                        OrphanReport(
+                            nodeId = state.nodeId,
+                            role = state.role.name,
+                            epoch = state.epoch,
+                            count = 0,
+                            entries = emptyList(),
+                            note = "Nothing to hand over.",
+                        )
+                    )
+                }
+
+                val delivered = replicator.handOver()
+                val remaining = changeLog.since(store.current().nodeId, store.current().peerAckedSeq)
+
+                call.application.log.warn(
+                    "Orphan handover: ${outstanding.size} offered, ${remaining.size} remaining"
+                )
+
+                call.respond(
+                    if (delivered) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable,
+                    OrphanReport(
+                        nodeId = state.nodeId,
+                        role = state.role.name,
+                        epoch = state.epoch,
+                        count = remaining.size,
+                        entries = remaining,
+                        note = if (delivered) {
+                            "Handed ${outstanding.size - remaining.size} change(s) to the peer."
+                        } else {
+                            "Peer did not accept the handover; nothing was lost here."
+                        },
+                    ),
+                )
             }
 
             /** Permanent failover history — who claimed which epoch, and why. */

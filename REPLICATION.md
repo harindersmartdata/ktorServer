@@ -66,11 +66,33 @@ network gear is out.
       **Note:** `promotion_log` is per-node and is not replicated, so reconstructing a
       full failover history means reading it from both terminals.
 - [ ] **6. Client redirection** — `421` + primary address; client-side candidate list.
-- [ ] **7. Recovery + re-sync** — demote a stale returning node, catch it up, bootstrap
-      a brand-new secondary from a snapshot.
+- [x] **7. Recovery + re-sync**
+      - *Reverse catch-up needed no code.* A recovered node receives what it missed
+        through the ordinary catch-up loop, because the new primary originates under its
+        own node id and pushes that stream like any other. Verified end to end.
+      - **Fixed an unrecoverable split-brain.** Two nodes claiming primary at the *same*
+        epoch never resolved: fencing only demotes on a strictly higher epoch, so
+        neither stood down, permanently. Heartbeats now carry role as well as epoch, and
+        an equal-epoch clash is broken deterministically on node id — the larger yields.
+        Both sides compute the same answer, so exactly one demotes with no negotiation.
+      - **Closed the hole that caused it.** `POST /replication/role` could hand out the
+        primary role with no safety check at all, bypassing everything `/promote`
+        enforces. It now refuses to elevate a secondary and points at `/promote`. `role`
+        became optional so a demoted terminal can be repointed at its replacement
+        without tripping that guard.
+      - **Orphans are surfaced, never merged silently.** `GET /replication/orphans`
+        lists changes this node originated that the peer never confirmed; on a demoted
+        node those are sales taken while it believed it was in charge.
+        `POST /replication/orphans/handover` delivers them, on the operator's say-so.
+      - **Fresh secondary bootstrap** works by replaying the log from zero: pointing at
+        a new peer resets `peerAckedSeq`, so a blank terminal receives the whole history.
+      **Remaining:** handover is all-or-nothing with no per-entry review; an adopted
+      orphan overwrites the primary's version of the same row (apply uses REPLACE); and
+      `change_log` is never truncated, so bootstrap replays everything ever written.
 - [ ] **8. Auth** — before any of this touches a real shop.
 
-Steps 1 and 2 are prerequisites for everything else. **Step 7 is the hardest.**
+Steps 1 and 2 are prerequisites for everything else. Remaining: **6** (client
+redirection) and **8** (auth).
 
 ## Challenges, and where each is handled
 
@@ -101,12 +123,12 @@ decide independently that T1 is dead, they can disagree about who is primary.
 ### Client redirection — *step 6*
 Easy to leave too late. See decision 3.
 
-### Recovery — *step 7*
+### Recovery — *step 7 (done)*
 A returning T1 holds writes T2 never saw; T2 holds everything since promotion. T1 must
 detect it is stale and demote itself rather than resume as primary. Genuine conflicts
 (same order, different totals) cannot be resolved by last-write-wins without losing money.
 
-### Bootstrapping a new secondary — *step 7*
+### Bootstrapping a new secondary — *step 7 (done)*
 A fresh T3 starts empty: needs a full snapshot plus every change since, without taking
 the primary offline.
 
