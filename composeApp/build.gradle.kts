@@ -181,3 +181,22 @@ compose.desktop {
         }
     }
 }
+
+/**
+ * Runs the failover probe against a live pair of servers.
+ *
+ * Verification only — it is not part of the app. See ClientProbe.kt.
+ */
+tasks.register<JavaExec>("clientProbe") {
+    group = "verification"
+    description = "Drives TuCountClient against running servers to observe failover"
+
+    val desktopMain = kotlin.targets.getByName("desktop")
+        .compilations.getByName("main")
+
+    mainClass.set("com.example.ktorserver.ClientProbeKt")
+    classpath = files(desktopMain.output.allOutputs, desktopMain.runtimeDependencyFiles)
+    args = ((project.findProperty("probeArgs") as String?) ?: "")
+        .split(" ")
+        .filter { it.isNotEmpty() }
+}

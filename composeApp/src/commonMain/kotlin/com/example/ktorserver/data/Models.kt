@@ -291,3 +291,21 @@ data class OrphanReport(
     val entries: List<ChangeLogEntry>,
     val note: String,
 )
+
+/**
+ * Best-effort answer to "who should I be talking to?".
+ *
+ * Any node answers this, primary or not, so a client with a list of candidate
+ * addresses can find the right one in a single call instead of trying each in turn.
+ * [source] says how much to trust it: `self` is authoritative, `peer` is what the
+ * other terminal claimed when last heard from, `unknown` means nobody here knows.
+ */
+@Serializable
+data class PrimaryLocation(
+    /** Null when the answer is `self` — the client is already talking to it. */
+    val primaryAddress: String? = null,
+    val primaryNodeId: String? = null,
+    val epoch: Long,
+    val source: String,
+    val respondingRole: String,
+)

@@ -8,6 +8,7 @@ import com.example.ktorserver.data.HeartbeatRequest
 import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.NotPrimaryResponse
 import com.example.ktorserver.data.OrphanReport
+import com.example.ktorserver.data.PrimaryLocation
 import com.example.ktorserver.data.ReplicationState
 import com.example.ktorserver.data.PreparedChange
 import com.example.ktorserver.data.PromoteRequest
@@ -29,6 +30,7 @@ import io.ktor.util.logging.KtorSimpleLogger
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
+import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.application.log
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -119,6 +121,17 @@ fun Application.apiModule(
     peerMonitor: PeerMonitor?,
 ) {
 
+    // Every response says which role served it. A client reading from a secondary is
+    // reading a replica, and should be able to tell without a second request.
+    install(
+        createApplicationPlugin("ReplicationRoleHeader") {
+            onCall { call ->
+                call.response.headers.append("X-Replication-Role", store.current().role.name)
+                call.response.headers.append("X-Replication-Epoch", store.current().epoch.toString())
+            }
+        }
+    )
+
     install(ContentNegotiation) {
         json(
             Json {
@@ -173,6 +186,46 @@ fun Application.apiModule(
         }
 
         route("/replication") {
+
+            /**
+             * Where the primary is, as far as this node knows.
+             *
+             * Answered by any node, so a client holding both addresses resolves in one
+             * call. A secondary only names its peer if that peer actually claimed the
+             * primary role when last heard from — guessing would send clients to a
+             * terminal that has also stood down.
+             */
+            get("/primary") {
+                val state = store.current()
+                val peerIsPrimary = peerMonitor?.peerRole?.value == NodeRole.PRIMARY.name &&
+                    peerMonitor.peerReachable.value
+
+                call.respond(
+                    when {
+                        state.role == NodeRole.PRIMARY -> PrimaryLocation(
+                            primaryAddress = null,
+                            primaryNodeId = state.nodeId,
+                            epoch = state.epoch,
+                            source = "self",
+                            respondingRole = state.role.name,
+                        )
+
+                        peerIsPrimary -> PrimaryLocation(
+                            primaryAddress = state.peerAddress,
+                            primaryNodeId = state.peerNodeId,
+                            epoch = state.epoch,
+                            source = "peer",
+                            respondingRole = state.role.name,
+                        )
+
+                        else -> PrimaryLocation(
+                            epoch = state.epoch,
+                            source = "unknown",
+                            respondingRole = state.role.name,
+                        )
+                    }
+                )
+            }
 
             get("/status") {
                 val state = store.current()
@@ -550,6 +603,10 @@ private suspend fun ApplicationCall.requirePrimary(
     store: com.example.ktorserver.data.ReplicationStore,
     peerMonitor: PeerMonitor?,
 ): ReplicationState? {
+    // Only name the peer if it actually claimed primary when last heard from. Sending a
+    // client to a terminal that has also stood down just costs it another round trip.
+    val peerLikelyPrimary = peerMonitor == null ||
+        (peerMonitor.peerRole.value == NodeRole.PRIMARY.name && peerMonitor.peerReachable.value)
     val state = store.current()
 
     if (state.role == NodeRole.PRIMARY) {
@@ -575,7 +632,7 @@ private suspend fun ApplicationCall.requirePrimary(
         NotPrimaryResponse(
             role = state.role.name,
             epoch = state.epoch,
-            primaryAddress = state.peerAddress,
+            primaryAddress = state.peerAddress.takeIf { peerLikelyPrimary },
         ),
     )
     return null

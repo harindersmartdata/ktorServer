@@ -65,7 +65,20 @@ network gear is out.
       confirmation dialog and a second, blunter one for the override.
       **Note:** `promotion_log` is per-node and is not replicated, so reconstructing a
       full failover history means reading it from both terminals.
-- [ ] **6. Client redirection** — `421` + primary address; client-side candidate list.
+- [x] **6. Client redirection** — `TuCountClient` (commonMain) holds both terminal
+      addresses and works out which is primary, re-resolving when that changes, so
+      failover is invisible to calling code. `GET /replication/primary` is answered by
+      **any** node, so one reachable terminal is enough to locate the primary. A write
+      to a secondary gets `421` naming the real primary; a restarted primary still
+      checking its epoch gets `503` + `Retry-After` and the client waits rather than
+      going elsewhere. Every response carries `X-Replication-Role` and
+      `X-Replication-Epoch` so a client can tell it is reading a replica.
+      `./gradlew clientProbe` drives it against a live pair.
+      **Measured:** 22 writes across a real failover — 21 succeeded, the one failure
+      being the second when T1 was dead and T2 not yet promoted. All 21 landed.
+      **Note:** that gap is as long as a human takes to promote. Manual promotion is
+      what keeps two tills from trading at once; the cost is that the window is human
+      sized, not machine sized.
 - [x] **7. Recovery + re-sync**
       - *Reverse catch-up needed no code.* A recovered node receives what it missed
         through the ordinary catch-up loop, because the new primary originates under its
@@ -91,8 +104,8 @@ network gear is out.
       `change_log` is never truncated, so bootstrap replays everything ever written.
 - [ ] **8. Auth** — before any of this touches a real shop.
 
-Steps 1 and 2 are prerequisites for everything else. Remaining: **6** (client
-redirection) and **8** (auth).
+Steps 1 and 2 are prerequisites for everything else. Remaining: **8** (auth) — and
+nothing should reach a real shop before it lands.
 
 ## Challenges, and where each is handled
 
@@ -120,8 +133,9 @@ Timeout tuning is a real trade-off: too short and a Wi-Fi hiccup causes a false
 failover, too long and tills are unusable for minutes. Also: if T2, T3 and T4 each
 decide independently that T1 is dead, they can disagree about who is primary.
 
-### Client redirection — *step 6*
-Easy to leave too late. See decision 3.
+### Client redirection — *step 6 (done)*
+See decision 3. Address-based rather than a moving IP, because IP takeover needs root
+and a server terminal may be an Android tablet.
 
 ### Recovery — *step 7 (done)*
 A returning T1 holds writes T2 never saw; T2 holds everything since promotion. T1 must
