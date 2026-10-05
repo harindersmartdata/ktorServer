@@ -38,6 +38,7 @@ class KtorServerService : Service() {
             writeDao = app.writeDao,
             promotions = app.promotionDao,
             promotionCoordinator = app.promotionCoordinator,
+            secrets = { app.secrets.load() },
             replicator = app.replicator,
             peerMonitor = app.peerMonitor,
             port = KtorServer.DEFAULT_PORT,

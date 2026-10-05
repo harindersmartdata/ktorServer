@@ -9,6 +9,8 @@ import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.NotPrimaryResponse
 import com.example.ktorserver.data.OrphanReport
 import com.example.ktorserver.data.PrimaryLocation
+import com.example.ktorserver.security.Secrets
+import com.example.ktorserver.security.constantTimeEquals
 import com.example.ktorserver.data.ReplicationState
 import com.example.ktorserver.data.PreparedChange
 import com.example.ktorserver.data.PromoteRequest
@@ -24,6 +26,7 @@ import com.example.ktorserver.data.HealthResponse
 import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.UsersResponse
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.logging.KtorSimpleLogger
@@ -31,6 +34,9 @@ import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.auth.Authentication
+import io.ktor.server.auth.authenticate
+import io.ktor.server.auth.bearer
 import io.ktor.server.application.log
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -59,6 +65,7 @@ class KtorServer(
     private val writeDao: WriteDao,
     private val promotions: PromotionDao,
     private val promotionCoordinator: PromotionCoordinator? = null,
+    private val secrets: (suspend () -> Secrets)? = null,
     private val replicator: ChangeReplicator = NoReplication,
     private val peerMonitor: PeerMonitor? = null,
     private val port: Int = DEFAULT_PORT,
@@ -83,7 +90,7 @@ class KtorServer(
             module = {
                 apiModule(
                     startedAt, repository, store, changeLog,
-                    writeDao, promotions, promotionCoordinator, replicator, peerMonitor,
+                    writeDao, promotions, promotionCoordinator, replicator, peerMonitor, secrets,
                 )
             },
         ).also {
@@ -119,6 +126,7 @@ fun Application.apiModule(
     promotionCoordinator: PromotionCoordinator?,
     replicator: ChangeReplicator,
     peerMonitor: PeerMonitor?,
+    secrets: (suspend () -> Secrets)?,
 ) {
 
     // Every response says which role served it. A client reading from a secondary is
@@ -131,6 +139,33 @@ fun Application.apiModule(
             }
         }
     )
+
+    // Two tiers: the node token reaches /replication/ routes (replication batches, promotion,
+    // failover history); the client token only reaches the data routes. A till's
+    // credentials being lifted off a device must not let someone promote a terminal.
+    if (secrets != null) {
+        install(Authentication) {
+            bearer("node") {
+                realm = "TuCount node"
+                authenticate { credential ->
+                    val expected = secrets().nodeToken
+                    if (constantTimeEquals(credential.token, expected)) NodeCaller else null
+                }
+            }
+            bearer("client") {
+                realm = "TuCount client"
+                authenticate { credential ->
+                    val current = secrets()
+                    when {
+                        constantTimeEquals(credential.token, current.clientToken) -> ClientCaller
+                        // A node token is strictly more privileged, so it works here too.
+                        constantTimeEquals(credential.token, current.nodeToken) -> NodeCaller
+                        else -> null
+                    }
+                }
+            }
+        }
+    }
 
     install(ContentNegotiation) {
         json(
@@ -171,6 +206,30 @@ fun Application.apiModule(
         // GET /health -> liveness probe
         get("/health") {
             val state = store.current()
+
+            // Open so a watchdog can check liveness, but an anonymous caller gets only
+            // that. Node identity, role, epoch and row counts describe the shape of the
+            // deployment and are not owed to whoever can reach the port.
+            val presented = call.request.headers[HttpHeaders.Authorization]
+                ?.removePrefix("Bearer ")
+                ?.trim()
+            val known = secrets?.invoke()
+            val authorised = known == null || presented != null && (
+                constantTimeEquals(presented, known.nodeToken) ||
+                    constantTimeEquals(presented, known.clientToken)
+                )
+
+            if (!authorised) {
+                return@get call.respond(
+                    HealthResponse(
+                        status = "UP",
+                        uptimeMillis = Clock.System.now().toEpochMilliseconds() - startedAt,
+                        userCount = 0,
+                        serverTime = isoNow(),
+                    )
+                )
+            }
+
             call.respond(
                 HealthResponse(
                     status = "UP",
@@ -185,8 +244,9 @@ fun Application.apiModule(
             )
         }
 
-        route("/replication") {
-
+        // Discovery is reachable with EITHER token: a till cannot route its traffic
+        // without it, and it reveals only which terminal to talk to.
+        authenticatedAs(secrets, "client") {
             /**
              * Where the primary is, as far as this node knows.
              *
@@ -195,7 +255,7 @@ fun Application.apiModule(
              * primary role when last heard from — guessing would send clients to a
              * terminal that has also stood down.
              */
-            get("/primary") {
+            get("/replication/primary") {
                 val state = store.current()
                 val peerIsPrimary = peerMonitor?.peerRole?.value == NodeRole.PRIMARY.name &&
                     peerMonitor.peerReachable.value
@@ -226,6 +286,11 @@ fun Application.apiModule(
                     }
                 )
             }
+
+        }
+
+        authenticatedAs(secrets, "node") {
+        route("/replication") {
 
             get("/status") {
                 val state = store.current()
@@ -499,6 +564,9 @@ fun Application.apiModule(
             }
         }
 
+        }
+
+        authenticatedAs(secrets, "client") {
         route("/users") {
 
             // GET /users -> list every user
@@ -584,8 +652,29 @@ fun Application.apiModule(
                 }
             }
         }
+        }
     }
 }
+
+/**
+ * Applies a bearer requirement, or none at all when the server is running unsecured.
+ *
+ * Keeps the route tree identical in both cases so there is no second, untested shape
+ * of the routing to drift out of sync.
+ */
+private fun io.ktor.server.routing.Route.authenticatedAs(
+    secrets: (suspend () -> Secrets)?,
+    provider: String,
+    build: io.ktor.server.routing.Route.() -> Unit,
+) {
+    if (secrets == null) build() else authenticate(provider) { build() }
+}
+
+/** Marks a caller holding the node token. */
+internal object NodeCaller
+
+/** Marks a caller holding only the client token. */
+internal object ClientCaller
 
 /** Shared by the apply endpoint; kept lenient so a newer peer can add fields. */
 private val replicationJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }

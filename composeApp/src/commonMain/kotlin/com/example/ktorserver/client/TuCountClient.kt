@@ -13,10 +13,12 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -48,6 +50,8 @@ class NoPrimaryAvailable(candidates: List<String>) :
  */
 class TuCountClient(
     private val candidates: List<String>,
+    /** Client token issued by the server pair. Null only for an unsecured install. */
+    private val token: String? = null,
     private val http: HttpClient = defaultClient(),
     private val maxAttempts: Int = 4,
     private val allowStaleReads: Boolean = false,
@@ -62,21 +66,28 @@ class TuCountClient(
 
     // ---- API ---------------------------------------------------------------
 
-    suspend fun health(): HealthResponse = request { base -> http.get("http://$base/health") }.body()
+    suspend fun health(): HealthResponse =
+        request { base -> http.get("http://$base/health") { auth() } }.body()
 
-    suspend fun users(): UsersResponse = request { base -> http.get("http://$base/users") }.body()
+    suspend fun users(): UsersResponse =
+        request { base -> http.get("http://$base/users") { auth() } }.body()
 
     suspend fun createUser(name: String, email: String): User =
         request { base ->
             http.post("http://$base/users") {
+                auth()
                 contentType(ContentType.Application.Json)
                 setBody(CreateUserRequest(name, email))
             }
         }.body()
 
     suspend fun deleteUser(id: String): Boolean =
-        request { base -> http.delete("http://$base/users/$id") }
+        request { base -> http.delete("http://$base/users/$id") { auth() } }
             .status == HttpStatusCode.NoContent
+
+    private fun io.ktor.client.request.HttpRequestBuilder.auth() {
+        token?.let { header(HttpHeaders.Authorization, "Bearer $it") }
+    }
 
     // ---- resolution --------------------------------------------------------
 
@@ -95,7 +106,8 @@ class TuCountClient(
 
         for (candidate in ordered) {
             val location = runCatching {
-                http.get("http://$candidate/replication/primary").body<PrimaryLocation>()
+                http.get("http://$candidate/replication/primary") { auth() }
+                    .body<PrimaryLocation>()
             }.getOrNull() ?: continue
 
             val resolved = when (location.source) {

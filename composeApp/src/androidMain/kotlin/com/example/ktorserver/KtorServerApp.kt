@@ -6,6 +6,7 @@ import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.PeerMonitor
+import com.example.ktorserver.security.SecretsStore
 import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.data.databasePath
 
@@ -31,9 +32,13 @@ class KtorServerApp : Application() {
 
     val promotionDao by lazy { database.promotionDao() }
 
-    val replicator by lazy { HttpChangeReplicator(replicationStore, changeLogDao) }
+    val secrets by lazy { SecretsStore(database.replicationStateDao(), replicationStore) }
 
-    val peerMonitor by lazy { PeerMonitor(replicationStore) }
+    val replicator by lazy {
+        HttpChangeReplicator(replicationStore, changeLogDao, { secrets.load().nodeToken })
+    }
+
+    val peerMonitor by lazy { PeerMonitor(replicationStore, { secrets.load().nodeToken }) }
 
     val promotionCoordinator by lazy {
         PromotionCoordinator(replicationStore, promotionDao, peerMonitor)

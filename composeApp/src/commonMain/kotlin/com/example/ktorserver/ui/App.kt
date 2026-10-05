@@ -196,6 +196,22 @@ private fun ReplicationCard(replication: ReplicationUi) {
                 Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
             }
 
+            // Pairing: both terminals must hold the same node token or they cannot
+            // replicate. Shown here because this screen is the operator's own.
+            state?.nodeToken?.let { token ->
+                Spacer(Modifier.size(4.dp))
+                Text("Pairing token", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    token,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "The other terminal must be set to this same value.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
             if (role == NodeRole.PRIMARY && !confirmed) {
                 Text(
                     "Checking with the peer before accepting writes…",

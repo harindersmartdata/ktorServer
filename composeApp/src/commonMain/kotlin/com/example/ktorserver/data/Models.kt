@@ -98,6 +98,15 @@ data class ReplicationState(
      * write, and the resume point when the peer comes back.
      */
     val peerAckedSeq: Long = 0L,
+    /**
+     * Shared secret for server-to-server and operator traffic (`/replication/` routes).
+     *
+     * Both terminals must hold the SAME value or they cannot replicate to each other.
+     * Generated on first run and shown on screen so it can be copied to the other one.
+     */
+    val nodeToken: String? = null,
+    /** Secret for tills calling `/users`. Deliberately weaker in scope than nodeToken. */
+    val clientToken: String? = null,
 ) {
     companion object { const val SINGLETON_ID = 1 }
 }

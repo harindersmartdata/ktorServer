@@ -47,6 +47,7 @@ kotlin {
             implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
             implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
             implementation("io.ktor:ktor-server-cors:$ktorVersion")
+            implementation("io.ktor:ktor-server-auth:$ktorVersion")
 
             // The primary is also a client: it pushes changes to the secondary.
             // CIO is the one engine that works unchanged on Android and desktop.

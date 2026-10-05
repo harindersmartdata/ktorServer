@@ -102,10 +102,28 @@ network gear is out.
       **Remaining:** handover is all-or-nothing with no per-entry review; an adopted
       orphan overwrites the primary's version of the same row (apply uses REPLACE); and
       `change_log` is never truncated, so bootstrap replays everything ever written.
-- [ ] **8. Auth** — before any of this touches a real shop.
+- [x] **8. Auth** — bearer tokens in two tiers. The **node** token admits a caller to
+      the replication and operator routes (apply, promote, role, orphans, history); the
+      **client** token only reaches `/users`. A till's credentials being lifted off a
+      device therefore cannot promote a terminal or inject replication batches.
+      `/replication/primary` takes either, because a till cannot route without it.
+      `/health` stays open for watchdogs but returns only liveness to an anonymous
+      caller — node id, role, epoch and row counts are not owed to whoever reaches the
+      port. Tokens are generated on first run, persisted, shown on screen for pairing,
+      and overridable with `TUCOUNT_NODE_TOKEN` / `TUCOUNT_CLIENT_TOKEN`. Comparison is
+      constant-time so a token cannot be recovered a character at a time.
+      **Not a substitute for TLS.** The server speaks plain HTTP, so every request
+      carries its token in clear text; anyone who can capture packets on the shop LAN
+      can take it and use it. This raises the bar from "anyone who can reach the port"
+      to "anyone who can watch the wire", which is worth having, but real protection
+      needs certificates both terminals trust.
+      **Diagnosability gap:** a token mismatch between terminals surfaces as
+      `peerReachable=false` — the same signal as a dead peer. An operator would be told
+      the other terminal is not responding when it is actually rejecting the
+      credentials.
 
-Steps 1 and 2 are prerequisites for everything else. Remaining: **8** (auth) — and
-nothing should reach a real shop before it lands.
+All eight steps are done. The outstanding risks are recorded against each step above;
+the largest are the lack of TLS (step 8) and the human-sized failover window (step 6).
 
 ## Challenges, and where each is handled
 
@@ -146,9 +164,10 @@ detect it is stale and demote itself rather than resume as primary. Genuine conf
 A fresh T3 starts empty: needs a full snapshot plus every change since, without taking
 the primary offline.
 
-### Security — *step 8*
-Currently none. A replication endpoint means anyone on the LAN can push rows into the
-database; a promotion endpoint means anyone can promote themselves.
+### Security — *step 8 (done, with limits)*
+Two-tier bearer tokens close the open door: no anonymous caller can read rows, push a
+replication batch or promote a terminal. What remains is that the tokens travel in
+clear text over HTTP — see step 8.
 
 ### Android reliability — *step 4 (partly done)*
 OEM battery management (Xiaomi, Oppo, Vivo) kills foreground services. **A secondary

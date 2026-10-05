@@ -11,8 +11,10 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.post
+import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.logging.KtorSimpleLogger
@@ -77,6 +79,8 @@ object NoReplication : ChangeReplicator {
 class HttpChangeReplicator(
     private val store: ReplicationStore,
     private val changeLog: ChangeLogDao,
+    /** Node token, read lazily so a rotation takes effect without a restart. */
+    private val nodeToken: (suspend () -> String?)? = null,
     private val syncTimeoutMillis: Long = 2_000,
     private val catchUpIntervalMillis: Long = 5_000,
 ) : ChangeReplicator {
@@ -118,6 +122,7 @@ class HttpChangeReplicator(
 
         return try {
             val response: ApplyChangesResponse = client.post("http://$peer/replication/apply") {
+                nodeToken?.invoke()?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                 contentType(ContentType.Application.Json)
                 setBody(ApplyChangesRequest(state.nodeId, state.epoch, entries))
             }.body()

@@ -16,6 +16,7 @@ import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.server.PeerMonitor
 import com.example.ktorserver.server.PromotionCoordinator
+import com.example.ktorserver.security.SecretsStore
 import com.example.ktorserver.ui.App
 import com.example.ktorserver.ui.ReplicationUi
 import kotlinx.coroutines.launch
@@ -34,10 +35,20 @@ fun main() = application {
     val port = remember {
         System.getenv("TUCOUNT_PORT")?.toIntOrNull() ?: KtorServer.DEFAULT_PORT
     }
-    val replicator = remember {
-        HttpChangeReplicator(store, database.changeLogDao())
+    // Env overrides let an installer inject the shared secret; otherwise it is
+    // generated on first run and shown on screen for pairing.
+    val secrets = remember {
+        SecretsStore(
+            dao = database.replicationStateDao(),
+            store = store,
+            nodeTokenOverride = System.getenv("TUCOUNT_NODE_TOKEN"),
+            clientTokenOverride = System.getenv("TUCOUNT_CLIENT_TOKEN"),
+        )
     }
-    val monitor = remember { PeerMonitor(store) }
+    val replicator = remember {
+        HttpChangeReplicator(store, database.changeLogDao(), { secrets.load().nodeToken })
+    }
+    val monitor = remember { PeerMonitor(store, { secrets.load().nodeToken }) }
     val promotion = remember {
         PromotionCoordinator(store, database.promotionDao(), monitor)
     }
@@ -49,6 +60,7 @@ fun main() = application {
             writeDao = database.writeDao(),
             promotions = database.promotionDao(),
             promotionCoordinator = promotion,
+            secrets = { secrets.load() },
             replicator = replicator,
             monitor = monitor,
             port = port,

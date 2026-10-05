@@ -19,7 +19,7 @@ const val DATABASE_NAME = "ktor-server.db"
         ReplicationState::class,
         PromotionRecord::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -147,6 +147,14 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/** v5 -> v6: shared secrets for replication and client traffic. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE replication_state ADD COLUMN nodeToken TEXT")
+        connection.execSQL("ALTER TABLE replication_state ADD COLUMN clientToken TEXT")
+    }
+}
+
 /**
  * Shared tail of the builder chain.
  *
@@ -158,5 +166,7 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 fun RoomDatabase.Builder<AppDatabase>.configureAndBuild(): AppDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(ioDispatcher)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        .addMigrations(
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+        )
         .build()

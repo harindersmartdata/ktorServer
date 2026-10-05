@@ -10,8 +10,10 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.post
+import io.ktor.client.request.header
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.logging.KtorSimpleLogger
@@ -39,6 +41,7 @@ import kotlinx.serialization.json.Json
  */
 class PeerMonitor(
     private val store: ReplicationStore,
+    private val nodeToken: (suspend () -> String?)? = null,
     private val heartbeatIntervalMillis: Long = 2_000,
     private val failureThresholdMillis: Long = 10_000,
     private val startupGraceMillis: Long = 5_000,
@@ -125,6 +128,7 @@ class PeerMonitor(
         try {
             val status: ReplicationStatus =
                 client.post("http://$peer/replication/heartbeat") {
+                    nodeToken?.invoke()?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                     contentType(ContentType.Application.Json)
                     setBody(HeartbeatRequest(state.nodeId, state.epoch, state.role.name))
                 }.body()
@@ -172,6 +176,7 @@ class PeerMonitor(
         val peer = state.peerAddress ?: return null
         return try {
             client.post("http://$peer/replication/heartbeat") {
+                nodeToken?.invoke()?.let { header(HttpHeaders.Authorization, "Bearer $it") }
                 contentType(ContentType.Application.Json)
                 setBody(HeartbeatRequest(state.nodeId, state.epoch, state.role.name))
             }.body<ReplicationStatus>()
