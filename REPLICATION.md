@@ -244,11 +244,24 @@ Verified on macOS: announced as `tucount.local -> 172.24.0.60`, served `/health`
 `POST /users` through the name, stopped resolving on demotion, and came back on
 promotion.
 
-**Not yet verified:** mDNS from Android (the multicast-lock path has not been exercised
-— the test phone was on a different network from the desktop), and resolution from the
-POS app itself. `.local` lookup is patchy on some Android versions, needs Bonjour on
-Windows, and some networks block multicast — which is why the candidate-list fallback
-stays in the client.
+Verified on Android (Samsung SM-X210): the multicast lock is acquired on promotion and
+the name announced against the correct LAN address, the name is given up and the lock
+**released** on demotion, and both are re-acquired on re-promotion. The lock tracks the
+role exactly, so a secondary is not left holding a battery-draining lock. Confirmed from
+the system log rather than the app's own, since a silently-filtered responder would look
+identical from inside the app:
+
+```
+WifiService: acquireMulticastLock uid=10274 lockTag=tucount-mdns
+mDNS - Announcing tucount.local -> 192.168.2.66:8080
+```
+
+**Still not verified: resolution by a remote client.** Both test devices have so far
+been on different networks from the desktop, so nothing has yet resolved `tucount.local`
+*across* the LAN to an Android primary. `.local` lookup is patchy on some Android
+versions, needs Bonjour on Windows, and some networks block multicast — which is why the
+candidate-list fallback stays in the client. Closing this needs a client and an Android
+primary on the same Wi-Fi.
 
 Finding the address to advertise also needed fixing. Enumerating interfaces picked a
 self-assigned `169.254` address on one host and an unreachable virtual `192.168.2.1` on
