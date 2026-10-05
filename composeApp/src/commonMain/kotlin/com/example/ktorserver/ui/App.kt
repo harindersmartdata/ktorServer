@@ -173,7 +173,7 @@ private fun ReplicationCard(replication: ReplicationUi) {
                 Text("Replication", style = MaterialTheme.typography.titleSmall)
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    "${'$'}{role.name} · epoch ${'$'}{state?.epoch ?: 0}",
+                    "${role.name} · epoch ${state?.epoch ?: 0}",
                     fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -293,8 +293,8 @@ private fun PromotionDialogs(
             title = { Text("The other terminal is still running") },
             text = {
                 Text(
-                    "It answered just now and reports itself as ${'$'}{refused.peerRole} at " +
-                        "epoch ${'$'}{refused.peerEpoch}. This is not a failover.\n\n" +
+                    "It answered just now and reports itself as ${refused.peerRole} at " +
+                        "epoch ${refused.peerEpoch}. This is not a failover.\n\n" +
                         "Promoting anyway gives you two primaries taking sales at the " +
                         "same time. Only continue if you know the other terminal is " +
                         "unusable despite answering."

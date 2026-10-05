@@ -29,6 +29,11 @@ class MainActivity : ComponentActivity() {
 
         val app = application as KtorServerApp
 
+        // Generate the pairing tokens up front. They were previously created on the
+        // first authenticated request, so a terminal that had not served one yet showed
+        // an empty pairing panel and could not be paired.
+        lifecycleScope.launch { app.secrets.load() }
+
         setContent {
             App(
                 controller = AndroidServerController(this),

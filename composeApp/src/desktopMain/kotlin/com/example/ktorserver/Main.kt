@@ -71,7 +71,10 @@ fun main() = application {
     // going to click Start every morning.
     val uiScope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { controller.start() }
+    LaunchedEffect(Unit) {
+        secrets.load()
+        controller.start()
+    }
 
     Window(
         onCloseRequest = {
