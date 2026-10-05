@@ -65,7 +65,12 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
         }
 
+        // mDNS, so one constant URL always points at the current primary. JVM-only, so
+        // it lives in the platform source sets rather than commonMain.
+        val mdns = "org.jmdns:jmdns:3.5.12"
+
         androidMain.dependencies {
+            implementation(mdns)
             implementation("androidx.core:core-ktx:1.15.0")
             implementation("androidx.activity:activity-compose:1.9.3")
             implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
@@ -74,6 +79,7 @@ kotlin {
         }
 
         desktopMain.dependencies {
+            implementation(mdns)
             implementation(compose.desktop.currentOs)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:$coroutines")
             implementation("org.slf4j:slf4j-simple:2.0.16")

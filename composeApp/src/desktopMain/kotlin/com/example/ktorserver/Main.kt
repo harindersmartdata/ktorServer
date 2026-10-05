@@ -14,6 +14,7 @@ import com.example.ktorserver.data.databaseFile
 import com.example.ktorserver.server.DesktopServerController
 import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.KtorServer
+import com.example.ktorserver.server.JmdnsAdvertiser
 import com.example.ktorserver.server.PeerMonitor
 import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.security.SecretsStore
@@ -48,7 +49,14 @@ fun main() = application {
     val replicator = remember {
         HttpChangeReplicator(store, database.changeLogDao(), { secrets.load().nodeToken })
     }
-    val monitor = remember { PeerMonitor(store, { secrets.load().nodeToken }) }
+    val monitor = remember {
+        PeerMonitor(
+            store = store,
+            nodeToken = { secrets.load().nodeToken },
+            advertiser = JmdnsAdvertiser(),
+            servicePort = port,
+        )
+    }
     val promotion = remember {
         PromotionCoordinator(store, database.promotionDao(), monitor)
     }

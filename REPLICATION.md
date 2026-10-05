@@ -19,7 +19,7 @@ network gear is out.
 | 1 | **Synchronous** replication | T1 waits for T2 to ack before confirming a write. |
 | 1a | On T2 unreachable: **keep serving, queue silently** | Sync degrades to async whenever T2 is slow or down. "No data loss" holds *only while T2 is healthy*. Staleness is tracked internally but not surfaced as a loud alert. |
 | 2 | Replicate **everything** | Replication is schema-agnostic — `change_log` carries `tableName` + JSON. New TuCount tables need no replication changes. |
-| 3 | ~~Fixed IP + takeover~~ → **candidate list + redirect** | Original choice was fixed-IP takeover, **withdrawn**: stock Android cannot take over an IP. Clients instead hold both addresses; a non-primary replies `421` with the current primary's address and epoch. Works on both platforms, no infrastructure. |
+| 3 | **One constant URL**, `http://tucount.local:8080` | Fixed-IP takeover was withdrawn first (stock Android cannot take over an IP without root), then the candidate list alone was rejected: the POS app needs a single address it is configured with once. Whichever terminal is primary claims the name over mDNS and gives it up on demotion, so the URL never changes and nothing needs reconfiguring after a failover. The `421` redirect and candidate list remain as the fallback for clients that cannot resolve `.local`. |
 
 ## Steps
 
@@ -227,6 +227,34 @@ Two further defects came out of this run and are fixed: the heartbeat reply omit
 claimed sales were at risk that were already on the peer; and a promotion made from the
 screen recorded no reason in `promotion_log`, leaving the audit trail blank for exactly
 the promotions a person made by hand.
+
+## The constant URL
+
+The POS app is configured once with:
+
+```
+http://tucount.local:8080
+```
+
+Whichever terminal is primary announces that name over mDNS; a terminal that is demoted
+withdraws it within a heartbeat. Only a primary ever claims it, so two terminals cannot
+answer for it at once.
+
+Verified on macOS: announced as `tucount.local -> 172.24.0.60`, served `/health` and a
+`POST /users` through the name, stopped resolving on demotion, and came back on
+promotion.
+
+**Not yet verified:** mDNS from Android (the multicast-lock path has not been exercised
+— the test phone was on a different network from the desktop), and resolution from the
+POS app itself. `.local` lookup is patchy on some Android versions, needs Bonjour on
+Windows, and some networks block multicast — which is why the candidate-list fallback
+stays in the client.
+
+Finding the address to advertise also needed fixing. Enumerating interfaces picked a
+self-assigned `169.254` address on one host and an unreachable virtual `192.168.2.1` on
+another, while the real LAN address was `172.24.0.60`. It now asks the routing table by
+connecting a UDP socket, which transmits nothing but reveals the interface that actually
+carries traffic.
 
 ## Notes
 

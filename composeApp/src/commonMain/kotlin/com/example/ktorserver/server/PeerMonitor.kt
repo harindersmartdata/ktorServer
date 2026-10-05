@@ -3,7 +3,9 @@ package com.example.ktorserver.server
 import com.example.ktorserver.data.HeartbeatRequest
 import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.ReplicationStatus
+import com.example.ktorserver.data.ReplicationState
 import com.example.ktorserver.data.ReplicationStore
+import com.example.ktorserver.util.localIpv4Address
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -42,6 +44,9 @@ import kotlinx.serialization.json.Json
 class PeerMonitor(
     private val store: ReplicationStore,
     private val nodeToken: (suspend () -> String?)? = null,
+    /** Claims the fixed name while this terminal is primary. */
+    private val advertiser: ServiceAdvertiser? = null,
+    private val servicePort: Int = KtorServer.DEFAULT_PORT,
     private val heartbeatIntervalMillis: Long = 2_000,
     private val failureThresholdMillis: Long = 10_000,
     private val startupGraceMillis: Long = 5_000,
@@ -124,6 +129,11 @@ class PeerMonitor(
 
     private suspend fun tick() {
         val state = store.current()
+
+        // Done before anything peer-related: a primary with no peer configured still
+        // owns the name, and a demoted one must give it up even if the peer is silent.
+        syncAdvertisement(state)
+
         val peer = state.peerAddress
 
         if (peer == null) {
@@ -210,5 +220,26 @@ class PeerMonitor(
         }
     }
 
-    fun close() = client.close()
+    /**
+     * Keeps the advertised name attached to the primary.
+     *
+     * Re-asserted every tick rather than only on transitions, so a terminal whose IP
+     * changed under DHCP republishes under the new address without needing a restart.
+     */
+    private suspend fun syncAdvertisement(state: ReplicationState) {
+        val mdns = advertiser ?: return
+        if (state.role == NodeRole.PRIMARY) {
+            val address = localIpv4Address()
+            if (address != null) {
+                mdns.advertise(ServiceAdvertiser.HOST_NAME, address, servicePort)
+            }
+        } else {
+            mdns.withdraw()
+        }
+    }
+
+    fun close() {
+        advertiser?.withdraw()
+        client.close()
+    }
 }

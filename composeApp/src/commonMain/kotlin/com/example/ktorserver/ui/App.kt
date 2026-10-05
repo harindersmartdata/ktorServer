@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.User
 import com.example.ktorserver.server.KtorServer
+import com.example.ktorserver.server.ServiceAdvertiser
 import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.server.ServerController
 import kotlinx.coroutines.launch
@@ -102,7 +103,12 @@ fun ServerScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            StatusCard(running = running, baseUrl = baseUrl, error = error)
+            StatusCard(
+                running = running,
+                baseUrl = baseUrl,
+                posUrl = ServiceAdvertiser.url(KtorServer.DEFAULT_PORT),
+                error = error,
+            )
 
             if (replication != null) ReplicationCard(replication)
 
@@ -309,7 +315,7 @@ private fun PromotionDialogs(
 }
 
 @Composable
-private fun StatusCard(running: Boolean, baseUrl: String, error: String?) {
+private fun StatusCard(running: Boolean, baseUrl: String, posUrl: String, error: String?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -324,7 +330,20 @@ private fun StatusCard(running: Boolean, baseUrl: String, error: String?) {
                     fontWeight = FontWeight.SemiBold,
                 )
             }
+            Text("This terminal", style = MaterialTheme.typography.bodySmall)
             Text(baseUrl, fontFamily = FontFamily.Monospace)
+
+            Spacer(Modifier.size(4.dp))
+
+            // The address the POS app is configured with. It never changes: whichever
+            // terminal is primary claims this name, so a failover needs no reconfiguring.
+            Text("POS app connects to", style = MaterialTheme.typography.bodySmall)
+            Text(
+                posUrl,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+            )
+
             if (error != null) {
                 Text("Error: $error", color = MaterialTheme.colorScheme.error)
             }

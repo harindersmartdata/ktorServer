@@ -5,6 +5,8 @@ import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.server.HttpChangeReplicator
+import com.example.ktorserver.server.JmdnsAdvertiser
+import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.server.PeerMonitor
 import com.example.ktorserver.security.SecretsStore
 import com.example.ktorserver.server.PromotionCoordinator
@@ -38,7 +40,14 @@ class KtorServerApp : Application() {
         HttpChangeReplicator(replicationStore, changeLogDao, { secrets.load().nodeToken })
     }
 
-    val peerMonitor by lazy { PeerMonitor(replicationStore, { secrets.load().nodeToken }) }
+    val peerMonitor by lazy {
+        PeerMonitor(
+            store = replicationStore,
+            nodeToken = { secrets.load().nodeToken },
+            advertiser = JmdnsAdvertiser(this),
+            servicePort = KtorServer.DEFAULT_PORT,
+        )
+    }
 
     val promotionCoordinator by lazy {
         PromotionCoordinator(replicationStore, promotionDao, peerMonitor)
