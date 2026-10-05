@@ -187,6 +187,8 @@ data class ReplicationStatus(
     val primaryUnavailable: Boolean? = null,
     /** False while a restarted primary is still confirming nobody outranks it. */
     val writesEnabled: Boolean? = null,
+    /** Why the last probe failed. Distinguishes a bad token from a dead terminal. */
+    val peerError: String? = null,
 )
 
 /**

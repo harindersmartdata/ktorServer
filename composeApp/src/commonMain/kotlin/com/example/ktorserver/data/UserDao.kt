@@ -22,4 +22,18 @@ interface UserDao {
 
     @Query("SELECT COUNT(*) FROM users")
     suspend fun count(): Int
+
+    /**
+     * Rows that no change_log entry describes.
+     *
+     * These exist because MIGRATION_1_2 converted the pre-replication table without
+     * logging anything — there was no node identity yet to attribute the writes to.
+     * Left alone they would never reach a secondary, so a shop upgrading from the old
+     * build would pair a replica that silently missed every historical row.
+     */
+    @Query(
+        "SELECT * FROM users WHERE id NOT IN " +
+            "(SELECT rowId FROM change_log WHERE tableName = 'users') ORDER BY createdAt, id"
+    )
+    suspend fun withoutLogEntries(): List<User>
 }

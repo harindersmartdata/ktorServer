@@ -175,6 +175,36 @@ that is silently dead is worse than no secondary** — you believe you are prote
 you are not. Liveness must be reported, never assumed. The monitor actively probes rather than
 waiting to be told, so a reaped process is detected within the failure threshold.
 
+## Verified on hardware
+
+Samsung SM-X210 (Android 15) as primary, macOS desktop as secondary, bridged with
+`adb forward` / `adb reverse`. Running it on a device found five defects that building
+and desktop-only testing had not:
+
+1. **Neither background loop ran on Android.** `PeerMonitor.start()` and
+   `startCatchUp()` were called only from `DesktopServerController`. Android therefore
+   had no heartbeats, no failure detection, no epoch exchange and no catch-up — and
+   because the startup check never completed, an Android primary refused every write.
+   Steps 3 and 4 were effectively dead on that platform.
+2. **Pre-replication rows could never replicate.** `MIGRATION_1_2` converted the old
+   table without writing `change_log` entries, so a shop upgrading from the old build
+   would pair a secondary that silently missed all historical data. A node now
+   backfills them when it is made primary.
+3. **A replaced secondary was never resynced.** The primary kept its `peerAckedSeq`
+   across a wipe at the same address and resumed above it, so the replacement silently
+   never received the earlier changes. The peer's own report now wins.
+4. **The heartbeat reply omitted the high-water mark**, which made the above
+   reconciliation rewind to zero on every tick and resend the whole log forever.
+5. **Broken string interpolation** showed `${role.name}` as literal text in the
+   replication card and the promotion-refusal dialog, and the pairing token was
+   generated too late to ever appear.
+
+Not a finding, but worth recording: Android's cleartext restriction does **not** apply
+here. Ktor CIO uses raw sockets rather than the HTTP stack that consults
+`NetworkSecurityPolicy`, so no `usesCleartextTraffic` or network security config is
+needed. An earlier commit added one on a wrong diagnosis; it was removed after testing
+showed replication works without it.
+
 ## Notes
 
 - There is no demo seed any more. Two nodes each inventing `ada@example.com` with

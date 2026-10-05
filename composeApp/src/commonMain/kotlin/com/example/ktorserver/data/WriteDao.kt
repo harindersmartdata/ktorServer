@@ -107,6 +107,22 @@ abstract class WriteDao {
         return appliedThrough
     }
 
+    /**
+     * Writes a log entry for a row that already exists, without touching the row.
+     *
+     * Only for backfilling pre-replication data. Everything written since goes through
+     * the logged insert/delete paths, which keep row and entry in one transaction.
+     */
+    @Transaction
+    open suspend fun logExistingRow(
+        rowId: String,
+        payload: String,
+        nodeId: String,
+        epoch: Long,
+        txId: String,
+        now: Long,
+    ): Long = appendLog(nodeId, epoch, txId, "users", rowId, ChangeOp.INSERT, payload, now)
+
     protected suspend fun appendLog(
         nodeId: String,
         epoch: Long,

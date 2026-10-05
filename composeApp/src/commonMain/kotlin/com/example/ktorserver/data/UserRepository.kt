@@ -61,6 +61,35 @@ class UserRepository(
         }
     }
 
+    /**
+     * Gives pre-replication rows a change_log entry so they can reach a secondary.
+     *
+     * Run only when this node is made primary: if both terminals did it independently
+     * they would each author entries for the same logical rows under different node
+     * ids, and the unique email index would then fight over them on first sync.
+     *
+     * Returns how many rows were backfilled.
+     */
+    suspend fun backfillUnloggedRows(): Int {
+        val state = store.current()
+        val rows = dao.withoutLogEntries()
+        if (rows.isEmpty()) return 0
+
+        val now = Clock.System.now().toEpochMilliseconds()
+        val txId = Uuid.random().toString()
+        for (row in rows) {
+            writeDao.logExistingRow(
+                rowId = row.id,
+                payload = json.encodeToString(row),
+                nodeId = state.nodeId,
+                epoch = state.epoch,
+                txId = txId,
+                now = now,
+            )
+        }
+        return rows.size
+    }
+
     suspend fun delete(id: String): Boolean {
         val state = store.current()
         // -1 means the row was not there, so nothing was logged either.

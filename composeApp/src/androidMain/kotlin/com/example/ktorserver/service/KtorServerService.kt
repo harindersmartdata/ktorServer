@@ -14,8 +14,13 @@ import androidx.core.app.NotificationCompat
 import com.example.ktorserver.KtorServerApp
 import com.example.ktorserver.MainActivity
 import com.example.ktorserver.R
+import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.util.localIpv4Address
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +33,15 @@ import kotlinx.coroutines.flow.asStateFlow
  * socket alive while the app is in the background.
  */
 class KtorServerService : Service() {
+
+    /**
+     * Hosts the replication background loops for as long as the service lives.
+     *
+     * These were previously started only on desktop, which left Android with no
+     * heartbeats, no failure detection, no epoch exchange and no catch-up — and because
+     * the startup check never completed, an Android primary refused every write.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val server by lazy {
         val app = application as KtorServerApp
@@ -70,6 +84,12 @@ class KtorServerService : Service() {
             .onSuccess {
                 _isRunning.value = true
                 _lastError.value = null
+
+                val app = application as KtorServerApp
+                // Drains anything the peer missed while it was away.
+                (app.replicator as? HttpChangeReplicator)?.startCatchUp(scope)
+                // Probes the peer so liveness is observed rather than assumed.
+                app.peerMonitor.start(scope)
             }
             .onFailure { error ->
                 _lastError.value = error.message ?: error::class.java.simpleName
@@ -137,6 +157,7 @@ class KtorServerService : Service() {
 
     override fun onDestroy() {
         if (_isRunning.value) server.stop()
+        scope.cancel()
         _isRunning.value = false
         super.onDestroy()
     }

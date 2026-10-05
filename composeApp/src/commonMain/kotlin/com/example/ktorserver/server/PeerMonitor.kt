@@ -69,6 +69,16 @@ class PeerMonitor(
     val peerRole: StateFlow<String?> = _peerRole.asStateFlow()
 
     /**
+     * Why the last probe failed, or null when the peer is answering.
+     *
+     * Without this, a wrong token, a blocked network and a terminal that is simply
+     * switched off all look identical from the UI — "peer not responding" — and an
+     * operator has no way to tell which problem they are actually looking at.
+     */
+    private val _peerError = MutableStateFlow<String?>(null)
+    val peerError: StateFlow<String?> = _peerError.asStateFlow()
+
+    /**
      * The signal the operator acts on: this node is a secondary and the primary has
      * been silent for longer than the failure threshold.
      *
@@ -135,8 +145,18 @@ class PeerMonitor(
 
             _lastContactAt.value = now
             _peerReachable.value = true
+            _peerError.value = null
             _peerRole.value = status.role
             everContacted = true
+
+            // The peer also reports how much of our stream it actually holds. If that is
+            // less than we recorded, it was reset or replaced and we must rewind.
+            if (store.reconcilePeerAck(status.lastAppliedSeq)) {
+                logger.warn(
+                    "Peer holds only up to seq ${status.lastAppliedSeq} of our stream; " +
+                        "rewinding and resending"
+                )
+            }
 
             // The reply carries the peer's epoch. If it outranks ours we stand down here,
             // before the write guard is ever consulted.
@@ -146,7 +166,8 @@ class PeerMonitor(
             }
         } catch (cause: Exception) {
             _peerReachable.value = false
-            logger.debug("Peer $peer unreachable (${cause::class.simpleName})")
+            _peerError.value = "${cause::class.simpleName}: ${cause.message?.take(160)}"
+            logger.debug("Peer $peer unreachable (${cause::class.simpleName}): ${cause.message}")
         }
 
         val current = store.current()

@@ -308,6 +308,7 @@ fun Application.apiModule(
                         unreplicated = (localSeq - state.peerAckedSeq).coerceAtLeast(0),
                         peerReachable = peerMonitor?.peerReachable?.value,
                         primaryUnavailable = peerMonitor?.primaryUnavailable?.value,
+                        peerError = peerMonitor?.peerError?.value,
                         writesEnabled = peerMonitor?.let {
                             state.role == NodeRole.PRIMARY && it.startupConfirmed.value
                         },
@@ -347,6 +348,16 @@ fun Application.apiModule(
                 }
 
                 val state = store.configure(role, body.peerAddress)
+
+                // Becoming primary is the moment to make historical rows replicable.
+                if (role == NodeRole.PRIMARY) {
+                    val backfilled = repository.backfillUnloggedRows()
+                    if (backfilled > 0) {
+                        call.application.log.warn(
+                            "Backfilled $backfilled pre-replication row(s) into change_log"
+                        )
+                    }
+                }
                 call.respond(
                     ReplicationStatus(
                         nodeId = state.nodeId,

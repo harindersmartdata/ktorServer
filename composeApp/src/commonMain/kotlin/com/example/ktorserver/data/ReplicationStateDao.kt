@@ -24,6 +24,18 @@ interface ReplicationStateDao {
     )
     suspend fun recordApplied(nodeId: String, seq: Long)
 
+    /**
+     * Forces the ack mark, including downwards.
+     *
+     * Only for when the peer itself reports holding less than we believed — a replaced
+     * or reset terminal at the same address. Ordinary acks use [recordPeerAck].
+     */
+    @Query(
+        "UPDATE replication_state SET peerAckedSeq = :seq " +
+            "WHERE id = ${ReplicationState.SINGLETON_ID}"
+    )
+    suspend fun forcePeerAck(seq: Long)
+
     /** Never moves backwards: a late reply must not undo a later ack. */
     @Query(
         "UPDATE replication_state SET peerAckedSeq = :seq " +

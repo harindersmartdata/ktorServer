@@ -158,4 +158,19 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
      * Everything above this is unreplicated and would be lost if we failed right now.
      */
     suspend fun recordPeerAck(seq: Long) = dao.recordPeerAck(seq)
+
+    /**
+     * Believes the peer about how much of our stream it holds.
+     *
+     * A terminal that was wiped, reinstalled or swapped comes back at the same address
+     * holding nothing, while we still think it acknowledged everything up to some mark.
+     * Left alone we would resume above that mark and it would silently never receive
+     * the earlier changes. Its own report wins.
+     */
+    suspend fun reconcilePeerAck(peerReports: Long): Boolean {
+        val state = current()
+        if (peerReports >= state.peerAckedSeq) return false
+        dao.forcePeerAck(peerReports)
+        return true
+    }
 }
