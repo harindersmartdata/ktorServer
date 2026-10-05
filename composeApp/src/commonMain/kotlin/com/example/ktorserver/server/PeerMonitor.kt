@@ -156,5 +156,30 @@ class PeerMonitor(
         }
     }
 
+    /**
+     * One-shot exchange with the peer, outside the polling loop.
+     *
+     * Used twice around a promotion: beforehand to find out whether the old primary is
+     * actually dead, and immediately afterwards to announce the new epoch so it stands
+     * down at once instead of waiting for its own next heartbeat. That second call is
+     * what keeps the two-primary window to a round trip rather than a poll interval.
+     *
+     * Returns null when the peer does not answer, which is the normal case during a
+     * real failover.
+     */
+    suspend fun probe(): ReplicationStatus? {
+        val state = store.current()
+        val peer = state.peerAddress ?: return null
+        return try {
+            client.post("http://$peer/replication/heartbeat") {
+                contentType(ContentType.Application.Json)
+                setBody(HeartbeatRequest(state.nodeId, state.epoch))
+            }.body<ReplicationStatus>()
+        } catch (cause: Exception) {
+            logger.debug("Probe of $peer failed (${cause::class.simpleName})")
+            null
+        }
+    }
+
     fun close() = client.close()
 }

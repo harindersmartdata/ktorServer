@@ -53,7 +53,18 @@ network gear is out.
       5s grace expires with the peer unreachable.
       **Remaining:** a recovered node is a secondary but still missing whatever was
       written while it was away — reverse catch-up is step 7.
-- [ ] **5. Manual promotion** — bump epoch, guard against split-brain.
+- [x] **5. Manual promotion** — `POST /replication/promote` probes the peer first and
+      **refuses with 409 if it is still answering and still claims primary** — that is
+      not a failover, it is a second primary. `force=true` overrides (a primary can
+      answer heartbeats with a wedged database) and the override is recorded. Every
+      promotion is written to `promotion_log`: epoch, time, whether forced, whether the
+      peer was reachable, what it claimed, and the operator's reason. After promoting,
+      the new epoch is announced to the peer immediately, so the old primary stands
+      down in one round trip instead of waiting for its next heartbeat. The on-screen
+      button goes through the same `PromotionCoordinator` as the API, with a plain
+      confirmation dialog and a second, blunter one for the override.
+      **Note:** `promotion_log` is per-node and is not replicated, so reconstructing a
+      full failover history means reading it from both terminals.
 - [ ] **6. Client redirection** — `421` + primary address; client-side candidate list.
 - [ ] **7. Recovery + re-sync** — demote a stale returning node, catch it up, bootstrap
       a brand-new secondary from a snapshot.
@@ -69,7 +80,7 @@ No change log means no way to know what changed. Wall-clock ordering is wrong be
 terminals' clocks disagree. Multi-table transactions must apply atomically downstream
 (`txId` groups them — the grouping exists, applying by group lands in step 3).
 
-### Split-brain — *steps 2 (done), 4, 5 and 7*
+### Split-brain — *steps 2, 4, 5 done; 7 remaining*
 T1 is not dead, just unreachable. T2 gets promoted. Both accept sales and diverge.
 Manual promotion reduces this but does not solve it: the person at T2 cannot see that
 T1 is still serving someone else. The guard is the **epoch** — any node that sees a

@@ -104,6 +104,32 @@ data class ReplicationState(
 
 enum class NodeRole { PRIMARY, SECONDARY, UNCONFIGURED }
 
+/**
+ * One promotion, recorded permanently.
+ *
+ * A failover is the moment a shop's data can diverge, so it must leave a trace that
+ * outlives the UI: which node claimed which epoch, when, whether the old primary was
+ * still answering at the time, and whether a human overrode the safety check. When two
+ * terminals later disagree about the day's takings, this is the record that explains why.
+ *
+ * Keyed on (nodeId, epoch) rather than epoch alone: a correct system never issues the
+ * same epoch twice, but the log must still be able to record it if that ever happens.
+ */
+@Entity(tableName = "promotion_log", primaryKeys = ["nodeId", "epoch"])
+@Serializable
+data class PromotionRecord(
+    val nodeId: String,
+    val epoch: Long,
+    val at: Long,
+    /** True when the operator promoted despite the peer still claiming primary. */
+    val forced: Boolean,
+    /** Whether the peer answered a probe at the moment of promotion. */
+    val peerReachable: Boolean,
+    val peerRoleAtPromotion: String? = null,
+    val peerEpochAtPromotion: Long? = null,
+    val reason: String? = null,
+)
+
 // ---- API DTOs ---------------------------------------------------------------
 
 @Serializable
@@ -211,4 +237,30 @@ data class ApplyChangesResponse(
     /** The receiver's epoch, so a stale sender learns it has been superseded. */
     val epoch: Long,
     val reason: String? = null,
+)
+
+/** Body of `POST /replication/promote`. */
+@Serializable
+data class PromoteRequest(
+    /**
+     * Promote even though the peer is still answering and claiming primary.
+     *
+     * The safety check exists because promoting a second primary is how a shop ends up
+     * with two divergent sets of takings. Overriding it is sometimes correct — a primary
+     * that answers health checks but has a wedged database, say — so it is allowed, and
+     * recorded.
+     */
+    val force: Boolean = false,
+    val reason: String? = null,
+)
+
+/** Returned with 409 when the safety check blocks a promotion. */
+@Serializable
+data class PromotionRefused(
+    val error: String,
+    val peerRole: String,
+    val peerEpoch: Long,
+    val ourEpoch: Long,
+    val hint: String = "Pass force=true to promote anyway. Both terminals will accept " +
+        "sales until the other one is told to stand down.",
 )

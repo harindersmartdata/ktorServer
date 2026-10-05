@@ -36,6 +36,8 @@ class KtorServerService : Service() {
             store = app.replicationStore,
             changeLog = app.changeLogDao,
             writeDao = app.writeDao,
+            promotions = app.promotionDao,
+            promotionCoordinator = app.promotionCoordinator,
             replicator = app.replicator,
             peerMonitor = app.peerMonitor,
             port = KtorServer.DEFAULT_PORT,

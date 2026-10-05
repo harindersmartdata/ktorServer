@@ -13,8 +13,13 @@ import com.example.ktorserver.util.ioDispatcher
 const val DATABASE_NAME = "ktor-server.db"
 
 @Database(
-    entities = [User::class, ChangeLogEntry::class, ReplicationState::class],
-    version = 4,
+    entities = [
+        User::class,
+        ChangeLogEntry::class,
+        ReplicationState::class,
+        PromotionRecord::class,
+    ],
+    version = 5,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -23,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun changeLogDao(): ChangeLogDao
     abstract fun replicationStateDao(): ReplicationStateDao
     abstract fun writeDao(): WriteDao
+    abstract fun promotionDao(): PromotionDao
 }
 
 @Suppress("NO_ACTUAL_FOR_EXPECT", "EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
@@ -120,6 +126,27 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/** v4 -> v5: permanent record of every failover. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            """
+            CREATE TABLE promotion_log (
+                nodeId TEXT NOT NULL,
+                epoch INTEGER NOT NULL,
+                at INTEGER NOT NULL,
+                forced INTEGER NOT NULL,
+                peerReachable INTEGER NOT NULL,
+                peerRoleAtPromotion TEXT,
+                peerEpochAtPromotion INTEGER,
+                reason TEXT,
+                PRIMARY KEY(nodeId, epoch)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
 /**
  * Shared tail of the builder chain.
  *
@@ -131,5 +158,5 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 fun RoomDatabase.Builder<AppDatabase>.configureAndBuild(): AppDatabase =
     setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(ioDispatcher)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .build()

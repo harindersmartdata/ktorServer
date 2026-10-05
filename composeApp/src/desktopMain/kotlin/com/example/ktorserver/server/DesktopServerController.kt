@@ -3,6 +3,7 @@ package com.example.ktorserver.server
 import com.example.ktorserver.data.ChangeLogDao
 import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.UserRepository
+import com.example.ktorserver.data.PromotionDao
 import com.example.ktorserver.data.WriteDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,13 +22,25 @@ class DesktopServerController(
     store: ReplicationStore,
     changeLog: ChangeLogDao,
     writeDao: WriteDao,
+    promotions: PromotionDao,
+    promotionCoordinator: PromotionCoordinator? = null,
     private val replicator: ChangeReplicator = NoReplication,
     private val monitor: PeerMonitor? = null,
     port: Int = KtorServer.DEFAULT_PORT,
 ) : ServerController {
 
     private val server =
-        KtorServer(repository, store, changeLog, writeDao, replicator, monitor, port)
+        KtorServer(
+            repository = repository,
+            store = store,
+            changeLog = changeLog,
+            writeDao = writeDao,
+            promotions = promotions,
+            promotionCoordinator = promotionCoordinator,
+            replicator = replicator,
+            peerMonitor = monitor,
+            port = port,
+        )
 
     /** Outlives individual requests: the catch-up loop runs for the server's lifetime. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

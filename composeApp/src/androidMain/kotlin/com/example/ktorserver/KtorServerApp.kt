@@ -6,6 +6,7 @@ import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.PeerMonitor
+import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.data.databasePath
 
 /**
@@ -28,9 +29,15 @@ class KtorServerApp : Application() {
 
     val writeDao by lazy { database.writeDao() }
 
+    val promotionDao by lazy { database.promotionDao() }
+
     val replicator by lazy { HttpChangeReplicator(replicationStore, changeLogDao) }
 
     val peerMonitor by lazy { PeerMonitor(replicationStore) }
+
+    val promotionCoordinator by lazy {
+        PromotionCoordinator(replicationStore, promotionDao, peerMonitor)
+    }
 
     val databasePath: String by lazy { databasePath(this) }
 }

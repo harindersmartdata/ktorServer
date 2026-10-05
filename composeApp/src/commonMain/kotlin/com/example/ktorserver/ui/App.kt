@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +28,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +43,9 @@ import androidx.compose.ui.unit.dp
 import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.User
 import com.example.ktorserver.server.KtorServer
+import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.server.ServerController
+import kotlinx.coroutines.launch
 import com.example.ktorserver.util.localIpv4Address
 import kotlinx.coroutines.flow.Flow
 
@@ -144,6 +152,10 @@ private fun ReplicationCard(replication: ReplicationUi) {
     val primaryGone by replication.primaryUnavailable.collectAsState()
     val confirmed by replication.startupConfirmed.collectAsState()
 
+    val scope = rememberCoroutineScope()
+    var confirming by remember { mutableStateOf(false) }
+    var refusal by remember { mutableStateOf<PromotionCoordinator.Outcome.Refused?>(null) }
+
     val role = state?.role ?: NodeRole.UNCONFIGURED
 
     Card(
@@ -204,13 +216,77 @@ private fun ReplicationCard(replication: ReplicationUi) {
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Button(
-                    onClick = replication.onPromote,
+                    onClick = { confirming = true },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
                     ),
                 ) { Text("Make this terminal primary") }
             }
         }
+    }
+
+    PromotionDialogs(
+        confirming = confirming,
+        refusal = refusal,
+        onDismissConfirm = { confirming = false },
+        onConfirm = {
+            confirming = false
+            scope.launch {
+                val outcome = replication.promote(false)
+                if (outcome is PromotionCoordinator.Outcome.Refused) refusal = outcome
+            }
+        },
+        onDismissRefusal = { refusal = null },
+        onForce = {
+            refusal = null
+            scope.launch { replication.promote(true) }
+        },
+    )
+}
+
+/** Plain-language confirmation. Failover is not an action to take by accident. */
+@Composable
+private fun PromotionDialogs(
+    confirming: Boolean,
+    refusal: PromotionCoordinator.Outcome.Refused?,
+    onDismissConfirm: () -> Unit,
+    onConfirm: () -> Unit,
+    onDismissRefusal: () -> Unit,
+    onForce: () -> Unit,
+) {
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = onDismissConfirm,
+            title = { Text("Make this terminal the primary?") },
+            text = {
+                Text(
+                    "This terminal will start accepting sales and storing them. Do this " +
+                        "only if the current primary is really down — if it is still " +
+                        "running somewhere, both will take sales and the two sets of " +
+                        "data will have to be sorted out by hand afterwards."
+                )
+            },
+            confirmButton = { TextButton(onClick = onConfirm) { Text("Promote") } },
+            dismissButton = { TextButton(onClick = onDismissConfirm) { Text("Cancel") } },
+        )
+    }
+
+    refusal?.let { refused ->
+        AlertDialog(
+            onDismissRequest = onDismissRefusal,
+            title = { Text("The other terminal is still running") },
+            text = {
+                Text(
+                    "It answered just now and reports itself as ${'$'}{refused.peerRole} at " +
+                        "epoch ${'$'}{refused.peerEpoch}. This is not a failover.\n\n" +
+                        "Promoting anyway gives you two primaries taking sales at the " +
+                        "same time. Only continue if you know the other terminal is " +
+                        "unusable despite answering."
+                )
+            },
+            confirmButton = { TextButton(onClick = onForce) { Text("Promote anyway") } },
+            dismissButton = { TextButton(onClick = onDismissRefusal) { Text("Cancel") } },
+        )
     }
 }
 

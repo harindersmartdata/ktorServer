@@ -15,6 +15,7 @@ import com.example.ktorserver.server.DesktopServerController
 import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.server.PeerMonitor
+import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.ui.App
 import com.example.ktorserver.ui.ReplicationUi
 import kotlinx.coroutines.launch
@@ -37,12 +38,17 @@ fun main() = application {
         HttpChangeReplicator(store, database.changeLogDao())
     }
     val monitor = remember { PeerMonitor(store) }
+    val promotion = remember {
+        PromotionCoordinator(store, database.promotionDao(), monitor)
+    }
     val controller = remember {
         DesktopServerController(
             repository = repository,
             store = store,
             changeLog = database.changeLogDao(),
             writeDao = database.writeDao(),
+            promotions = database.promotionDao(),
+            promotionCoordinator = promotion,
             replicator = replicator,
             monitor = monitor,
             port = port,
@@ -72,7 +78,7 @@ fun main() = application {
                 peerReachable = monitor.peerReachable,
                 primaryUnavailable = monitor.primaryUnavailable,
                 startupConfirmed = monitor.startupConfirmed,
-                onPromote = { uiScope.launch { store.promote() } },
+                promote = { force -> promotion.promote(force) },
             ),
         )
     }

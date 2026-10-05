@@ -9,6 +9,10 @@ import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.NotPrimaryResponse
 import com.example.ktorserver.data.ReplicationState
 import com.example.ktorserver.data.PreparedChange
+import com.example.ktorserver.data.PromoteRequest
+import com.example.ktorserver.data.PromotionDao
+import com.example.ktorserver.data.PromotionRecord
+import com.example.ktorserver.data.PromotionRefused
 import com.example.ktorserver.data.ReplicationStatus
 import com.example.ktorserver.data.User
 import com.example.ktorserver.data.WriteDao
@@ -50,6 +54,8 @@ class KtorServer(
     private val store: ReplicationStore,
     private val changeLog: ChangeLogDao,
     private val writeDao: WriteDao,
+    private val promotions: PromotionDao,
+    private val promotionCoordinator: PromotionCoordinator? = null,
     private val replicator: ChangeReplicator = NoReplication,
     private val peerMonitor: PeerMonitor? = null,
     private val port: Int = DEFAULT_PORT,
@@ -71,7 +77,12 @@ class KtorServer(
             // 0.0.0.0 makes the server reachable from other devices on the same
             // network. Use 127.0.0.1 to keep it on-device only.
             host = "0.0.0.0",
-            module = { apiModule(startedAt, repository, store, changeLog, writeDao, replicator, peerMonitor) },
+            module = {
+                apiModule(
+                    startedAt, repository, store, changeLog,
+                    writeDao, promotions, promotionCoordinator, replicator, peerMonitor,
+                )
+            },
         ).also {
             // wait = false: never block the caller's thread.
             it.start(wait = false)
@@ -101,6 +112,8 @@ fun Application.apiModule(
     store: ReplicationStore,
     changeLog: ChangeLogDao,
     writeDao: WriteDao,
+    promotions: PromotionDao,
+    promotionCoordinator: PromotionCoordinator?,
     replicator: ChangeReplicator,
     peerMonitor: PeerMonitor?,
 ) {
@@ -284,21 +297,50 @@ fun Application.apiModule(
                 )
             }
 
-            // Failover: claim a new epoch. The operator decides when, not the software.
+            /**
+             * Failover. The operator decides when, never the software.
+             *
+             * Refuses by default if the peer is still answering and still claims to be
+             * primary: that is not a failover, it is a second primary, and it ends with
+             * two divergent sets of takings. force=true overrides, because a primary
+             * can answer heartbeats while being useless, and the override is recorded.
+             */
             post("/promote") {
-                val state = store.promote()
-                call.application.log.warn(
-                    "PROMOTED to primary at epoch ${state.epoch} (node ${state.nodeId})"
-                )
-                call.respond(
-                    ReplicationStatus(
-                        nodeId = state.nodeId,
-                        role = state.role.name,
-                        epoch = state.epoch,
-                        peerAddress = state.peerAddress,
-                        peerNodeId = state.peerNodeId,
+                val body = runCatching { call.receive<PromoteRequest>() }
+                    .getOrElse { PromoteRequest() }
+
+                val coordinator = promotionCoordinator
+                    ?: return@post call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        ErrorResponse("Promotion is not configured on this node"),
                     )
-                )
+
+                when (val outcome = coordinator.promote(body.force, body.reason)) {
+                    is PromotionCoordinator.Outcome.Refused -> call.respond(
+                        HttpStatusCode.Conflict,
+                        PromotionRefused(
+                            error = "The other terminal is still running as primary",
+                            peerRole = outcome.peerRole,
+                            peerEpoch = outcome.peerEpoch,
+                            ourEpoch = outcome.ourEpoch,
+                        ),
+                    )
+
+                    is PromotionCoordinator.Outcome.Promoted -> call.respond(
+                        ReplicationStatus(
+                            nodeId = outcome.state.nodeId,
+                            role = outcome.state.role.name,
+                            epoch = outcome.state.epoch,
+                            peerAddress = outcome.state.peerAddress,
+                            peerNodeId = outcome.state.peerNodeId,
+                        )
+                    )
+                }
+            }
+
+            /** Permanent failover history — who claimed which epoch, and why. */
+            get("/promotions") {
+                call.respond(promotions.recent())
             }
         }
 

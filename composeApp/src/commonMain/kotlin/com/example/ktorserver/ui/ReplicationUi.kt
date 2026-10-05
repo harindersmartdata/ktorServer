@@ -1,6 +1,7 @@
 package com.example.ktorserver.ui
 
 import com.example.ktorserver.data.ReplicationState
+import com.example.ktorserver.server.PromotionCoordinator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -11,6 +12,10 @@ class ReplicationUi(
     val primaryUnavailable: StateFlow<Boolean>,
     /** False only while a restarted node is still checking its epoch with the peer. */
     val startupConfirmed: StateFlow<Boolean>,
-    /** Promotion is a human decision, so this is only ever called from a button. */
-    val onPromote: () -> Unit,
+    /**
+     * Runs the same coordinator the HTTP endpoint uses, so the button cannot skip the
+     * safety check. Returns the outcome so the screen can offer the override when the
+     * old primary turns out to still be alive.
+     */
+    val promote: suspend (force: Boolean) -> PromotionCoordinator.Outcome,
 )

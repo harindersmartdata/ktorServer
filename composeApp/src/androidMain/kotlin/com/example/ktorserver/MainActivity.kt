@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
                     peerReachable = app.peerMonitor.peerReachable,
                     primaryUnavailable = app.peerMonitor.primaryUnavailable,
                     startupConfirmed = app.peerMonitor.startupConfirmed,
-                    onPromote = { lifecycleScope.launch { app.replicationStore.promote() } },
+                    promote = { force -> app.promotionCoordinator.promote(force) },
                 ),
                 onOpenBatterySettings = {
                     runCatching {
