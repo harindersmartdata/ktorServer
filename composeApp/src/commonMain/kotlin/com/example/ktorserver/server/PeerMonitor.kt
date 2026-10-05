@@ -151,11 +151,14 @@ class PeerMonitor(
 
             // The peer also reports how much of our stream it actually holds. If that is
             // less than we recorded, it was reset or replaced and we must rewind.
+            val before = store.current().peerAckedSeq
             if (store.reconcilePeerAck(status.lastAppliedSeq)) {
-                logger.warn(
-                    "Peer holds only up to seq ${status.lastAppliedSeq} of our stream; " +
-                        "rewinding and resending"
-                )
+                if (status.lastAppliedSeq < before) {
+                    logger.warn(
+                        "Peer holds only up to seq ${status.lastAppliedSeq} of our " +
+                            "stream; rewinding and resending"
+                    )
+                }
             }
 
             // The reply carries the peer's epoch. If it outranks ours we stand down here,

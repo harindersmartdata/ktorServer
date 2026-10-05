@@ -395,6 +395,11 @@ fun Application.apiModule(
                         epoch = state.epoch,
                         peerAddress = state.peerAddress,
                         peerNodeId = state.peerNodeId,
+                        localSeq = changeLog.latestSeq(state.nodeId),
+                        // The sender reconciles its ack mark from this. Omitting it made
+                        // it believe the peer held nothing, so `unreplicated` reported
+                        // sales at risk that were already safely on the other terminal.
+                        lastAppliedSeq = state.lastAppliedSeq,
                     )
                 )
             }

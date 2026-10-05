@@ -169,7 +169,10 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
      */
     suspend fun reconcilePeerAck(peerReports: Long): Boolean {
         val state = current()
-        if (peerReports >= state.peerAckedSeq) return false
+        if (peerReports == state.peerAckedSeq) return false
+        // Authoritative in both directions. Lower when the peer was reset or replaced;
+        // higher when it holds more than we recorded, which happens after a rewind —
+        // leaving it low made `unreplicated` claim sales were at risk that were not.
         dao.forcePeerAck(peerReports)
         return true
     }

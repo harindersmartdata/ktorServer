@@ -93,7 +93,7 @@ fun main() = application {
                 peerReachable = monitor.peerReachable,
                 primaryUnavailable = monitor.primaryUnavailable,
                 startupConfirmed = monitor.startupConfirmed,
-                promote = { force -> promotion.promote(force) },
+                promote = { force, reason -> promotion.promote(force, reason) },
             ),
         )
     }

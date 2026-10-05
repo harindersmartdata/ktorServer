@@ -17,5 +17,5 @@ class ReplicationUi(
      * safety check. Returns the outcome so the screen can offer the override when the
      * old primary turns out to still be alive.
      */
-    val promote: suspend (force: Boolean) -> PromotionCoordinator.Outcome,
+    val promote: suspend (force: Boolean, reason: String?) -> PromotionCoordinator.Outcome,
 )

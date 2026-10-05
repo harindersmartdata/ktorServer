@@ -248,14 +248,16 @@ private fun ReplicationCard(replication: ReplicationUi) {
         onConfirm = {
             confirming = false
             scope.launch {
-                val outcome = replication.promote(false)
+                val outcome = replication.promote(false, "Promoted from the terminal screen")
                 if (outcome is PromotionCoordinator.Outcome.Refused) refusal = outcome
             }
         },
         onDismissRefusal = { refusal = null },
         onForce = {
             refusal = null
-            scope.launch { replication.promote(true) }
+            scope.launch {
+                replication.promote(true, "Forced from the terminal screen despite the peer answering")
+            }
         },
     )
 }

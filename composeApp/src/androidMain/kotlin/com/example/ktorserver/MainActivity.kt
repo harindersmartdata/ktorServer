@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
                     peerReachable = app.peerMonitor.peerReachable,
                     primaryUnavailable = app.peerMonitor.primaryUnavailable,
                     startupConfirmed = app.peerMonitor.startupConfirmed,
-                    promote = { force -> app.promotionCoordinator.promote(force) },
+                    promote = { force, reason -> app.promotionCoordinator.promote(force, reason) },
                 ),
                 onOpenBatterySettings = {
                     runCatching {

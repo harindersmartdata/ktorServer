@@ -205,6 +205,29 @@ here. Ktor CIO uses raw sockets rather than the HTTP stack that consults
 needed. An earlier commit added one on a wrong diagnosis; it was removed after testing
 showed replication works without it.
 
+## Failover, verified on hardware
+
+Full cycle, both directions, tablet and desktop:
+
+| | |
+|---|---|
+| Tablet primary force-stopped | Desktop raised `primaryUnavailable` in 10s |
+| Desktop promoted (unforced) | epoch 2, took 2 sales while the tablet was down |
+| Tablet returned believing PRIMARY/epoch 1 | Fenced on its **first** write attempt — `421`, already SECONDARY/epoch 2 |
+| Reverse catch-up | Tablet received both missed sales unprompted |
+| Desktop primary killed | Tablet raised the on-screen alert in 10s |
+| Operator tapped promote on the tablet | Confirmation dialog, then PRIMARY/epoch 3, trading immediately |
+| Desktop returned believing PRIMARY/epoch 2 | Fenced on its first write attempt — SECONDARY/epoch 3 |
+| Final state | Both 8 rows, one primary, epoch 3 |
+
+**Zero writes leaked through a stale primary in either direction.**
+
+Two further defects came out of this run and are fixed: the heartbeat reply omitted
+`lastAppliedSeq`, so a primary under-reported replication progress and `unreplicated`
+claimed sales were at risk that were already on the peer; and a promotion made from the
+screen recorded no reason in `promotion_log`, leaving the audit trail blank for exactly
+the promotions a person made by hand.
+
 ## Notes
 
 - There is no demo seed any more. Two nodes each inventing `ada@example.com` with
