@@ -269,6 +269,27 @@ another, while the real LAN address was `172.24.0.60`. It now asks the routing t
 connecting a UDP socket, which transmits nothing but reveals the interface that actually
 carries traffic.
 
+## Peer discovery
+
+Each terminal announces itself under `_tucount._tcp` with its node id, whatever its
+role, and follows the peer to a new address when DHCP moves it. Matching is on node id,
+so a terminal follows the one it is paired with and not whatever else is on the network.
+
+Verified on a Xiaomi Redmi Note 8 Pro (Android 11, MIUI):
+
+```
+acquireMulticastLock uid=10251
+mDNS - Announced self as 1a1f0d46 at 192.168.2.67:8080; browsing for peers
+mDNS - Claimed tucount.local -> 192.168.2.67:8080
+```
+
+**Still unverified: discovery actually finding another terminal, and replication over
+real Wi-Fi.** Every cross-device test so far has gone through `adb` bridges on loopback.
+Closing it needs both terminals on the new build on the same network at the same time.
+
+Also unverified: whether a client resolves `tucount.local`. The desktop proved it on
+macOS; nothing has resolved it to an *Android* primary.
+
 ## Notes
 
 - There is no demo seed any more. Two nodes each inventing `ada@example.com` with

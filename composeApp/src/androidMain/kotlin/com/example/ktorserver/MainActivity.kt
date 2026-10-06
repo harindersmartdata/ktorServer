@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.ktorserver.server.AndroidServerController
+import com.example.ktorserver.service.KtorServerService
 import androidx.lifecycle.lifecycleScope
 import com.example.ktorserver.ui.App
 import com.example.ktorserver.ui.ReplicationUi
@@ -33,6 +34,12 @@ class MainActivity : ComponentActivity() {
         // first authenticated request, so a terminal that had not served one yet showed
         // an empty pairing panel and could not be paired.
         lifecycleScope.launch { app.secrets.load() }
+
+        // Start serving without waiting to be asked, as the desktop build does. A till
+        // that needs someone to tap Start every morning is a till that will spend some
+        // mornings not serving. The buttons stay for deliberate control; the service is
+        // idempotent, so this is a no-op when it is already running.
+        KtorServerService.start(this)
 
         setContent {
             App(
