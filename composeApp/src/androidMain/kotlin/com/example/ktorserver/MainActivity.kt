@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
                     state = app.replicationStore.observe(),
                     peerReachable = app.peerMonitor.peerReachable,
                     primaryUnavailable = app.peerMonitor.primaryUnavailable,
+                    noPrimaryAnywhere = app.peerMonitor.noPrimaryAnywhere,
                     startupConfirmed = app.peerMonitor.startupConfirmed,
                     promote = { force, reason -> app.promotionCoordinator.promote(force, reason) },
                     discovered = app.advertiser.peers,

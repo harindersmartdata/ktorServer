@@ -315,6 +315,7 @@ fun Application.apiModule(
                         peerReachable = peerMonitor?.peerReachable?.value,
                         primaryUnavailable = peerMonitor?.primaryUnavailable?.value,
                         peerError = peerMonitor?.peerError?.value,
+                        noPrimaryAnywhere = peerMonitor?.noPrimaryAnywhere?.value,
                         writesEnabled = peerMonitor?.let {
                             state.role == NodeRole.PRIMARY && it.startupConfirmed.value
                         },

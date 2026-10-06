@@ -315,6 +315,23 @@ The code is eight characters from an alphabet with no `0`/`O` or `1`/`I`, shown 
 `2J7J-6A2P`, so it can be read aloud across a shop. The previous 32-character hex token
 was unusable: nobody transcribes that correctly between two tablets.
 
+## Two terminals, no primary
+
+A quieter failure than split-brain, and one that happened in testing: after a run of
+forced promotions both terminals ended up demoted. Every write was refused with `421`,
+and the redirect pointed at a terminal that refused it too — tills failing with nowhere
+to go while both screens looked perfectly healthy.
+
+Each terminal now raises `noPrimaryAnywhere` when it is not primary, the peer is
+answering, and the peer is not primary either. The screen turns red and says plainly
+that no terminal is taking sales, with the button to fix it. Reachability is required
+before raising it: a peer that is merely unreachable might well be primary.
+
+**Forcing a promotion repeatedly is how you get there.** Each force bumps the epoch and
+demotes the other terminal; alternating between the two walks the epoch up with no
+settled primary at the end. Force exists for a primary that answers but is unusable —
+it is not a way to pick which terminal wins an argument.
+
 ## Notes
 
 - There is no demo seed any more. Two nodes each inventing `ada@example.com` with

@@ -95,6 +95,18 @@ class PeerMonitor(
     val primaryUnavailable: StateFlow<Boolean> = _primaryUnavailable.asStateFlow()
 
     /**
+     * Neither terminal is primary, and both are up.
+     *
+     * A quiet way to lose a shop: every write is refused with 421 and the redirect
+     * points at a terminal that refuses it too, so tills fail with nowhere to go while
+     * both screens look healthy. It happened here after a run of forced promotions left
+     * both sides demoted, and nothing said so. Reachability is required before raising
+     * it, because a peer that is merely unreachable might well be primary.
+     */
+    private val _noPrimaryAnywhere = MutableStateFlow(false)
+    val noPrimaryAnywhere: StateFlow<Boolean> = _noPrimaryAnywhere.asStateFlow()
+
+    /**
      * Whether this node has finished its post-startup epoch check.
      *
      * A node that restarts believing it is primary must not take sales before checking
@@ -189,6 +201,11 @@ class PeerMonitor(
 
         _primaryUnavailable.value =
             current.role == NodeRole.SECONDARY && silentFor > failureThresholdMillis
+
+        _noPrimaryAnywhere.value = current.role != NodeRole.PRIMARY &&
+            _peerReachable.value &&
+            _peerRole.value != null &&
+            _peerRole.value != NodeRole.PRIMARY.name
 
         if (everContacted || now - startedAt > startupGraceMillis) {
             _startupConfirmed.value = true

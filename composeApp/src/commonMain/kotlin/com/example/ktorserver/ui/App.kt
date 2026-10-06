@@ -162,6 +162,7 @@ private fun ReplicationCard(replication: ReplicationUi) {
     val state by replication.state.collectAsState(initial = null)
     val peerUp by replication.peerReachable.collectAsState()
     val primaryGone by replication.primaryUnavailable.collectAsState()
+    val noPrimary by replication.noPrimaryAnywhere.collectAsState()
     val confirmed by replication.startupConfirmed.collectAsState()
 
     val scope = rememberCoroutineScope()
@@ -173,7 +174,7 @@ private fun ReplicationCard(replication: ReplicationUi) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (primaryGone) {
+            containerColor = if (primaryGone || noPrimary) {
                 MaterialTheme.colorScheme.errorContainer
             } else {
                 MaterialTheme.colorScheme.surfaceVariant
@@ -206,6 +207,20 @@ private fun ReplicationCard(replication: ReplicationUi) {
 
             state?.peerAddress?.let {
                 Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+            }
+
+            if (noPrimary) {
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    "No terminal is taking sales.",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "Both terminals are running but neither is the main one, so every " +
+                        "sale will be refused. Make one of them the main terminal.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             // Always offered, whatever the current role: a terminal that has been set

@@ -198,6 +198,8 @@ data class ReplicationStatus(
     val writesEnabled: Boolean? = null,
     /** Why the last probe failed. Distinguishes a bad token from a dead terminal. */
     val peerError: String? = null,
+    /** Both terminals are up and neither is primary, so no sales can be taken. */
+    val noPrimaryAnywhere: Boolean? = null,
 )
 
 /**

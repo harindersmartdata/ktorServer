@@ -104,6 +104,7 @@ fun main() = application {
                 state = store.observe(),
                 peerReachable = monitor.peerReachable,
                 primaryUnavailable = monitor.primaryUnavailable,
+                noPrimaryAnywhere = monitor.noPrimaryAnywhere,
                 startupConfirmed = monitor.startupConfirmed,
                 promote = { force, reason -> promotion.promote(force, reason) },
                 discovered = advertiser.peers,

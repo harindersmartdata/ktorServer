@@ -12,6 +12,8 @@ class ReplicationUi(
     val state: Flow<ReplicationState?>,
     val peerReachable: StateFlow<Boolean>,
     val primaryUnavailable: StateFlow<Boolean>,
+    /** Both terminals up, neither primary — nothing is taking sales. */
+    val noPrimaryAnywhere: StateFlow<Boolean>,
     /** False only while a restarted node is still checking its epoch with the peer. */
     val startupConfirmed: StateFlow<Boolean>,
     /**
