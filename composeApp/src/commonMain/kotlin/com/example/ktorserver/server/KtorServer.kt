@@ -7,9 +7,11 @@ import com.example.ktorserver.data.ConfigureRoleRequest
 import com.example.ktorserver.data.HeartbeatRequest
 import com.example.ktorserver.data.NodeRole
 import com.example.ktorserver.data.NotPrimaryResponse
+import com.example.ktorserver.data.PairRequest
 import com.example.ktorserver.data.OrphanReport
 import com.example.ktorserver.data.PrimaryLocation
 import com.example.ktorserver.security.Secrets
+import com.example.ktorserver.security.SecretsStore
 import com.example.ktorserver.security.constantTimeEquals
 import com.example.ktorserver.data.ReplicationState
 import com.example.ktorserver.data.PreparedChange
@@ -66,6 +68,7 @@ class KtorServer(
     private val promotions: PromotionDao,
     private val promotionCoordinator: PromotionCoordinator? = null,
     private val secrets: (suspend () -> Secrets)? = null,
+    private val secretsStore: SecretsStore? = null,
     private val replicator: ChangeReplicator = NoReplication,
     private val peerMonitor: PeerMonitor? = null,
     private val port: Int = DEFAULT_PORT,
@@ -90,7 +93,8 @@ class KtorServer(
             module = {
                 apiModule(
                     startedAt, repository, store, changeLog,
-                    writeDao, promotions, promotionCoordinator, replicator, peerMonitor, secrets,
+                    writeDao, promotions, promotionCoordinator, replicator, peerMonitor,
+                    secrets, secretsStore,
                 )
             },
         ).also {
@@ -127,6 +131,7 @@ fun Application.apiModule(
     replicator: ChangeReplicator,
     peerMonitor: PeerMonitor?,
     secrets: (suspend () -> Secrets)?,
+    secretsStore: SecretsStore?,
 ) {
 
     // Every response says which role served it. A client reading from a secondary is
@@ -571,6 +576,41 @@ fun Application.apiModule(
                             "Peer did not accept the handover; nothing was lost here."
                         },
                     ),
+                )
+            }
+
+            /**
+             * Adopts the other terminal's pairing token, so the two can replicate.
+             *
+             * Authenticated with THIS terminal's current token, which is printed on its
+             * own screen — so pairing requires physical access to the terminal being
+             * changed, not just knowledge of the one it is being joined to.
+             *
+             * Replication is rejected as unauthorised until both hold the same value,
+             * which is the single most likely thing to be wrong in a fresh install.
+             */
+            post("/pair") {
+                val body = call.receive<PairRequest>()
+                val updated = runCatching { secretsStore?.setNodeToken(body.nodeToken.trim()) }
+                    .getOrElse { failure ->
+                        return@post call.respond(
+                            HttpStatusCode.BadRequest,
+                            ErrorResponse("Could not set the pairing token", failure.message),
+                        )
+                    }
+                    ?: return@post call.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        ErrorResponse("Pairing is not configured on this node"),
+                    )
+
+                call.application.log.warn("Pairing token replaced; peer must hold the same value")
+                call.respond(
+                    ReplicationStatus(
+                        nodeId = store.current().nodeId,
+                        role = store.current().role.name,
+                        epoch = store.current().epoch,
+                        peerAddress = store.current().peerAddress,
+                    )
                 )
             }
 

@@ -14,7 +14,7 @@ import com.example.ktorserver.data.databaseFile
 import com.example.ktorserver.server.DesktopServerController
 import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.KtorServer
-import com.example.ktorserver.server.JmdnsAdvertiser
+import com.example.ktorserver.server.JmdnsServiceAdvertiser
 import com.example.ktorserver.server.PeerMonitor
 import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.security.SecretsStore
@@ -53,7 +53,7 @@ fun main() = application {
         PeerMonitor(
             store = store,
             nodeToken = { secrets.load().nodeToken },
-            advertiser = JmdnsAdvertiser(),
+            advertiser = JmdnsServiceAdvertiser(),
             servicePort = port,
         )
     }
@@ -69,6 +69,7 @@ fun main() = application {
             promotions = database.promotionDao(),
             promotionCoordinator = promotion,
             secrets = { secrets.load() },
+            secretsStore = secrets,
             replicator = replicator,
             monitor = monitor,
             port = port,

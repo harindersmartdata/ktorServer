@@ -53,6 +53,7 @@ class KtorServerService : Service() {
             promotions = app.promotionDao,
             promotionCoordinator = app.promotionCoordinator,
             secrets = { app.secrets.load() },
+            secretsStore = app.secrets,
             replicator = app.replicator,
             peerMonitor = app.peerMonitor,
             port = KtorServer.DEFAULT_PORT,

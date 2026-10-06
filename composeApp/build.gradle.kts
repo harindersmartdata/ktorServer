@@ -32,6 +32,9 @@ kotlin {
     jvm("desktop")
 
     sourceSets {
+        // Android and desktop are both JVM and share all the mDNS code; only the
+        // multicast lock differs. Without this they would hold two copies of it.
+        val jvmSharedMain by creating { dependsOn(commonMain.get()) }
         val desktopMain by getting
 
         commonMain.dependencies {
@@ -65,12 +68,17 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.2")
         }
 
-        // mDNS, so one constant URL always points at the current primary. JVM-only, so
-        // it lives in the platform source sets rather than commonMain.
-        val mdns = "org.jmdns:jmdns:3.5.12"
+        androidMain.get().dependsOn(jvmSharedMain)
+        desktopMain.dependsOn(jvmSharedMain)
+
+        // mDNS: one constant URL for clients, and peer discovery so the terminals find
+        // each other by name instead of an address DHCP keeps moving.
+        jvmSharedMain.dependencies {
+            implementation("org.jmdns:jmdns:3.5.12")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines")
+        }
 
         androidMain.dependencies {
-            implementation(mdns)
             implementation("androidx.core:core-ktx:1.15.0")
             implementation("androidx.activity:activity-compose:1.9.3")
             implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
@@ -79,7 +87,6 @@ kotlin {
         }
 
         desktopMain.dependencies {
-            implementation(mdns)
             implementation(compose.desktop.currentOs)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:$coroutines")
             implementation("org.slf4j:slf4j-simple:2.0.16")

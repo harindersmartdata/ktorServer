@@ -159,6 +159,9 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
      */
     suspend fun recordPeerAck(seq: Long) = dao.recordPeerAck(seq)
 
+    /** Follows the same peer to a new address, keeping the replication high-water mark. */
+    suspend fun followPeerTo(address: String) = dao.updatePeerAddress(address)
+
     /**
      * Believes the peer about how much of our stream it holds.
      *

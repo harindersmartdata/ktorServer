@@ -36,6 +36,19 @@ interface ReplicationStateDao {
     )
     suspend fun forcePeerAck(seq: Long)
 
+    /**
+     * Moves the peer to a new address without touching anything else.
+     *
+     * Used when discovery finds the SAME peer somewhere new, which is routine under
+     * DHCP. Deliberately not [put] with a changed address: that resets the ack mark,
+     * and the peer still holds everything it held a moment ago.
+     */
+    @Query(
+        "UPDATE replication_state SET peerAddress = :address " +
+            "WHERE id = ${ReplicationState.SINGLETON_ID}"
+    )
+    suspend fun updatePeerAddress(address: String)
+
     /** Never moves backwards: a late reply must not undo a later ack. */
     @Query(
         "UPDATE replication_state SET peerAckedSeq = :seq " +

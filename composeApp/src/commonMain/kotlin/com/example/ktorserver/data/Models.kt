@@ -320,3 +320,10 @@ data class PrimaryLocation(
     val source: String,
     val respondingRole: String,
 )
+
+/** Body of `POST /replication/pair`. */
+@Serializable
+data class PairRequest(
+    /** The other terminal's pairing token, read from its screen. */
+    val nodeToken: String,
+)

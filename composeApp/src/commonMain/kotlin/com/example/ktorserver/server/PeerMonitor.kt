@@ -133,8 +133,9 @@ class PeerMonitor(
         // Done before anything peer-related: a primary with no peer configured still
         // owns the name, and a demoted one must give it up even if the peer is silent.
         syncAdvertisement(state)
+        followDiscoveredPeer(state)
 
-        val peer = state.peerAddress
+        val peer = store.current().peerAddress
 
         if (peer == null) {
             // Standalone: no peer to contradict us, so nothing to wait for.
@@ -228,18 +229,51 @@ class PeerMonitor(
      */
     private suspend fun syncAdvertisement(state: ReplicationState) {
         val mdns = advertiser ?: return
+        val address = localIpv4Address() ?: return
+
+        // Announced whatever the role: the other terminal has to be able to find this
+        // one in order to replicate to it, not only when it happens to be primary.
+        mdns.announceSelf(state.nodeId, address, servicePort)
+
+        // The client-facing name belongs to the primary alone.
         if (state.role == NodeRole.PRIMARY) {
-            val address = localIpv4Address()
-            if (address != null) {
-                mdns.advertise(ServiceAdvertiser.HOST_NAME, address, servicePort)
-            }
+            mdns.claimPrimaryName(address, servicePort)
         } else {
-            mdns.withdraw()
+            mdns.releasePrimaryName()
+        }
+    }
+
+    /**
+     * Keeps the configured peer address pointing at where the peer actually is.
+     *
+     * DHCP moved both test devices within a single afternoon, and a configured address
+     * silently stops working the moment that happens. Discovery is matched on node id,
+     * so this follows the terminal we are paired with rather than whatever else happens
+     * to be on the network.
+     */
+    private suspend fun followDiscoveredPeer(state: ReplicationState) {
+        val mdns = advertiser ?: return
+        val seen = mdns.peers.value
+        if (seen.isEmpty()) return
+
+        val match = when {
+            // Once we know who our peer is, only ever follow that one.
+            state.peerNodeId != null -> seen.firstOrNull { it.nodeId == state.peerNodeId }
+            // Before the first contact a single visible terminal is unambiguous; more
+            // than one and an operator has to say which, since guessing could pair the
+            // wrong pair of tills.
+            seen.size == 1 -> seen.single()
+            else -> null
+        } ?: return
+
+        if (match.hostPort != state.peerAddress) {
+            store.followPeerTo(match.hostPort)
+            logger.info("Peer ${match.nodeId.take(8)} is now at ${match.hostPort}")
         }
     }
 
     fun close() {
-        advertiser?.withdraw()
+        advertiser?.shutdown()
         client.close()
     }
 }

@@ -1,35 +1,64 @@
 package com.example.ktorserver.server
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** Another terminal seen on the network. */
+data class DiscoveredPeer(
+    val nodeId: String,
+    val address: String,
+    val port: Int,
+) {
+    val hostPort: String get() = "$address:$port"
+}
+
 /**
- * Claims a fixed name on the local network for whichever terminal is currently primary.
+ * This terminal's presence on the local network, and what it can see of the other.
  *
- * The point is a URL that never changes. A till is configured once with
- * `http://tucount.local:8080` and keeps working after a failover, because the name
- * follows the primary rather than the primary having to take over an address — which
- * stock Android cannot do without root.
+ * Two jobs, both solving an address that will not stay still:
  *
- * Only the primary may advertise. Two terminals claiming the same name at once is an
- * mDNS conflict and clients would resolve to whichever answered first.
+ *  - **One constant URL for the POS app.** Whichever terminal is primary claims
+ *    `tucount.local`, so the app is configured once and keeps working after a failover.
+ *  - **Peer discovery.** Every terminal announces itself whatever its role, so the two
+ *    find each other by node id rather than by an address DHCP keeps reassigning. Both
+ *    devices moved address during a single afternoon of testing; a configured IP would
+ *    have broken replication each time.
  */
 interface ServiceAdvertiser {
 
-    /** Claims `<hostName>.local` for [ipv4]. Safe to call repeatedly with the same values. */
-    suspend fun advertise(hostName: String, ipv4: String, port: Int)
+    /** Announce this terminal, whatever its role, so the other can find it. */
+    suspend fun announceSelf(nodeId: String, ipv4: String, port: Int)
 
-    /** Gives up the name, so a demoted terminal stops answering for it. */
-    fun withdraw()
+    /** Claim the client-facing name. Only a primary may, or clients would see two. */
+    suspend fun claimPrimaryName(ipv4: String, port: Int)
+
+    /** Give up the client-facing name on demotion. */
+    fun releasePrimaryName()
+
+    /** Terminals currently visible, excluding this one. */
+    val peers: StateFlow<List<DiscoveredPeer>>
+
+    fun shutdown()
 
     companion object {
         /** The name tills are configured with. Changing it means reconfiguring them. */
         const val HOST_NAME = "tucount"
 
-        /** What an operator should put in the POS app. */
+        /** mDNS service type both terminals announce themselves under. */
+        const val SERVICE_TYPE = "_tucount._tcp.local."
+
+        /** What an operator puts in the POS app. */
         fun url(port: Int): String = "http://$HOST_NAME.local:$port"
     }
 }
 
-/** Used where mDNS is unavailable; the candidate-list fallback still applies. */
+/** Used where mDNS is unavailable; configured peer addresses still work. */
 object NoAdvertising : ServiceAdvertiser {
-    override suspend fun advertise(hostName: String, ipv4: String, port: Int) = Unit
-    override fun withdraw() = Unit
+    override suspend fun announceSelf(nodeId: String, ipv4: String, port: Int) = Unit
+    override suspend fun claimPrimaryName(ipv4: String, port: Int) = Unit
+    override fun releasePrimaryName() = Unit
+    override val peers: StateFlow<List<DiscoveredPeer>> =
+        MutableStateFlow<List<DiscoveredPeer>>(emptyList()).asStateFlow()
+    override fun shutdown() = Unit
 }
