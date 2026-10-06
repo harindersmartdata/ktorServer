@@ -105,6 +105,7 @@ fun main() = application {
                 peerReachable = monitor.peerReachable,
                 primaryUnavailable = monitor.primaryUnavailable,
                 noPrimaryAnywhere = monitor.noPrimaryAnywhere,
+                unreplicated = replicator.pending,
                 startupConfirmed = monitor.startupConfirmed,
                 promote = { force, reason -> promotion.promote(force, reason) },
                 discovered = advertiser.peers,

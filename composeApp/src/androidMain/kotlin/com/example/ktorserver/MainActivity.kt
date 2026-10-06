@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                     peerReachable = app.peerMonitor.peerReachable,
                     primaryUnavailable = app.peerMonitor.primaryUnavailable,
                     noPrimaryAnywhere = app.peerMonitor.noPrimaryAnywhere,
+                    unreplicated = app.replicator.pending,
                     startupConfirmed = app.peerMonitor.startupConfirmed,
                     promote = { force, reason -> app.promotionCoordinator.promote(force, reason) },
                     discovered = app.advertiser.peers,

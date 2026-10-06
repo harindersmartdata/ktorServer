@@ -332,6 +332,28 @@ demotes the other terminal; alternating between the two walks the epoch up with 
 settled primary at the end. Force exists for a primary that answers but is unusable —
 it is not a way to pick which terminal wins an argument.
 
+## The screen
+
+Written for whoever is standing at the till, not for whoever wrote the replication.
+
+A healthy terminal shows one sentence — "Taking sales" or "Backing up the main till" —
+whether the other one is connected, and the address the POS app uses. Nothing else, and
+nothing to press by accident.
+
+Roles are named **main till** and **backup till**. Epochs, node ids, sequence numbers,
+endpoints, the database path and the auth switch are all still there, under **Technical
+details**, which is where they are useful when something is genuinely wrong.
+
+**"Make this the main till" only appears when there is something to fix** — no primary
+anywhere, the main till not answering, or a terminal not set up yet. A healthy backup
+showing that button invites somebody to press it, and pressing it while the main till is
+working is how a shop ends up with two sets of takings. That is not hypothetical: it is
+what produced the epoch 3/4/5 forced promotions in the audit trail. A planned changeover
+is still possible, from Technical details.
+
+The setup card disappears once the two are joined. On the main till it had been offering
+to turn itself into the backup.
+
 ## Notes
 
 - There is no demo seed any more. Two nodes each inventing `ada@example.com` with
