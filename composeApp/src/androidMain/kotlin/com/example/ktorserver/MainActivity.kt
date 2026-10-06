@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
                     makePrimary = { app.pairingCoordinator.makePrimary() },
                     setRequireAuth = { app.replicationStore.setRequireClientAuth(it) },
                 ),
+                onAddTestRecord = { app.testRecords.insert() },
                 onOpenBatterySettings = {
                     runCatching {
                         startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))

@@ -70,11 +70,15 @@ fun App(
     usersFlow: Flow<List<User>>,
     databasePath: String,
     replication: ReplicationUi? = null,
+    onAddTestRecord: (suspend () -> String)? = null,
     onOpenBatterySettings: (() -> Unit)? = null,
 ) {
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            ServerScreen(controller, usersFlow, databasePath, replication, onOpenBatterySettings)
+            ServerScreen(
+                controller, usersFlow, databasePath, replication,
+                onAddTestRecord, onOpenBatterySettings,
+            )
         }
     }
 }
@@ -86,6 +90,7 @@ fun ServerScreen(
     usersFlow: Flow<List<User>>,
     databasePath: String,
     replication: ReplicationUi?,
+    onAddTestRecord: (suspend () -> String)?,
     onOpenBatterySettings: (() -> Unit)?,
 ) {
     val running by controller.isRunning.collectAsState()
@@ -103,6 +108,7 @@ fun ServerScreen(
     val scope = rememberCoroutineScope()
     var refusal by remember { mutableStateOf<PromotionCoordinator.Outcome.Refused?>(null) }
     var showDetails by remember { mutableStateOf(false) }
+    var testOutcome by remember { mutableStateOf<String?>(null) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Till server") }) }) { padding ->
         LazyColumn(
@@ -120,6 +126,20 @@ fun ServerScreen(
                     lag = lag,
                     error = error,
                 )
+            }
+
+            if (onAddTestRecord != null) {
+                item {
+                    TestRecordCard(
+                        isMain = role == NodeRole.PRIMARY,
+                        recordCount = users.size,
+                        outcome = testOutcome,
+                        onAdd = {
+                            testOutcome = "Adding…"
+                            scope.launch { testOutcome = onAddTestRecord() }
+                        },
+                    )
+                }
             }
 
             if (replication != null) {
@@ -216,6 +236,56 @@ fun ServerScreen(
 
 private fun <T> constFlow(value: T): StateFlow<T> =
     kotlinx.coroutines.flow.MutableStateFlow(value)
+
+/**
+ * Adds a throwaway record and shows the count, so the two tills can be compared by eye.
+ *
+ * The count is shown on both: on the backup there is nothing to press, but watching the
+ * number follow the main till is the whole point of the check.
+ */
+@Composable
+private fun TestRecordCard(
+    isMain: Boolean,
+    recordCount: Int,
+    outcome: String?,
+    onAdd: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Records on this till",
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    recordCount.toString(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            if (isMain) {
+                Button(onClick = onAdd) { Text("Add a test record") }
+                Text(
+                    "The number on the backup till should match within a second.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                Text(
+                    "This number is copied from the main till. It should match the " +
+                        "number shown there.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            outcome?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+}
 
 /** The one thing somebody glances at: is this till doing its job? */
 @Composable

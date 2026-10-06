@@ -8,6 +8,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.example.ktorserver.data.ReplicationStore
+import com.example.ktorserver.data.TestRecordInserter
 import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.data.databaseFile
@@ -63,6 +64,7 @@ fun main() = application {
     val promotion = remember {
         PromotionCoordinator(store, database.promotionDao(), monitor)
     }
+    val testRecords = remember { TestRecordInserter(repository, store, replicator) }
     val controller = remember {
         DesktopServerController(
             repository = repository,
@@ -100,6 +102,7 @@ fun main() = application {
             controller = controller,
             usersFlow = repository.users,
             databasePath = databaseFile().absolutePath,
+            onAddTestRecord = { testRecords.insert() },
             replication = ReplicationUi(
                 state = store.observe(),
                 peerReachable = monitor.peerReachable,
