@@ -22,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,6 +42,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ktorserver.data.NodeRole
+import com.example.ktorserver.server.DiscoveredPeer
+import com.example.ktorserver.server.PairingCoordinator
+import com.example.ktorserver.security.SecretsStore
 import com.example.ktorserver.data.User
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.server.ServiceAdvertiser
@@ -49,6 +53,7 @@ import com.example.ktorserver.server.ServerController
 import kotlinx.coroutines.launch
 import com.example.ktorserver.util.localIpv4Address
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Whole UI, shared by the APK and the Windows build.
@@ -202,21 +207,14 @@ private fun ReplicationCard(replication: ReplicationUi) {
                 Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
             }
 
-            // Pairing: both terminals must hold the same node token or they cannot
-            // replicate. Shown here because this screen is the operator's own.
-            state?.nodeToken?.let { token ->
-                Spacer(Modifier.size(4.dp))
-                Text("Pairing token", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    token,
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    "The other terminal must be set to this same value.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+            Spacer(Modifier.size(4.dp))
+            PairingSection(
+                code = state?.nodeToken,
+                role = role,
+                discovered = replication.discovered,
+                onPairWith = { peer, entered -> replication.pairAsSecondary(peer, entered) },
+                onMakePrimary = { replication.makePrimary() },
+            )
 
             if (role == NodeRole.PRIMARY && !confirmed) {
                 Text(
@@ -266,6 +264,116 @@ private fun ReplicationCard(replication: ReplicationUi) {
             }
         },
     )
+}
+
+/**
+ * Setting up a pair, without anyone needing to know what a token or an address is.
+ *
+ * The other terminals come from mDNS, so nothing has to be typed but the short code
+ * printed on the one you are joining — which is the only part a person cannot be
+ * spared, since it is what proves they can see both screens.
+ */
+@Composable
+private fun PairingSection(
+    code: String?,
+    role: NodeRole,
+    discovered: StateFlow<List<DiscoveredPeer>>,
+    onPairWith: suspend (DiscoveredPeer, String) -> PairingCoordinator.Result,
+    onMakePrimary: suspend () -> PairingCoordinator.Result,
+) {
+    val peers by discovered.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    var pairingWith by remember { mutableStateOf<DiscoveredPeer?>(null) }
+    var entered by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf<String?>(null) }
+
+    code?.let {
+        Text("This terminal's code", style = MaterialTheme.typography.titleSmall)
+        Text(
+            SecretsStore.format(it),
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            "Read this out when joining the other terminal to this one.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+
+    if (role == NodeRole.UNCONFIGURED) {
+        Spacer(Modifier.size(8.dp))
+        Button(onClick = { scope.launch { onMakePrimary() } }) {
+            Text("Make this the main terminal")
+        }
+    }
+
+    Spacer(Modifier.size(8.dp))
+    Text("Other terminals found", style = MaterialTheme.typography.titleSmall)
+
+    if (peers.isEmpty()) {
+        Text(
+            "None yet. Both terminals must be on the same Wi-Fi with the app open.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    } else {
+        peers.forEach { peer ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(peer.nodeId.take(8), fontFamily = FontFamily.Monospace)
+                    Text(peer.hostPort, style = MaterialTheme.typography.bodySmall)
+                }
+                OutlinedButton(onClick = {
+                    entered = ""
+                    problem = null
+                    pairingWith = peer
+                }) { Text("Connect to this") }
+            }
+        }
+    }
+
+    pairingWith?.let { peer ->
+        AlertDialog(
+            onDismissRequest = { pairingWith = null },
+            title = { Text("Connect to ${peer.nodeId.take(8)}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This terminal will become the backup for that one. " +
+                            "Type the code shown on its screen."
+                    )
+                    OutlinedTextField(
+                        value = entered,
+                        onValueChange = { entered = it; problem = null },
+                        singleLine = true,
+                        label = { Text("Code") },
+                    )
+                    problem?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        when (val result = onPairWith(peer, entered)) {
+                            is PairingCoordinator.Result.Paired -> pairingWith = null
+                            is PairingCoordinator.Result.Rejected -> problem = result.reason
+                        }
+                    }
+                }) { Text("Connect") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pairingWith = null }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 /** Plain-language confirmation. Failover is not an action to take by accident. */

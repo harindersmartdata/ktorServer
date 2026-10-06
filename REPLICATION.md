@@ -283,12 +283,24 @@ mDNS - Announced self as 1a1f0d46 at 192.168.2.67:8080; browsing for peers
 mDNS - Claimed tucount.local -> 192.168.2.67:8080
 ```
 
-**Still unverified: discovery actually finding another terminal, and replication over
-real Wi-Fi.** Every cross-device test so far has gone through `adb` bridges on loopback.
-Closing it needs both terminals on the new build on the same network at the same time.
+Verified between two Android terminals on real Wi-Fi, with no `adb` bridges: a Samsung
+SM-X210 at `192.168.2.66` and a Xiaomi Redmi Note 8 Pro at `192.168.2.67` found each
+other by mDNS, were paired from the tablet's screen, and replicated two writes with zero
+lag.
 
-Also unverified: whether a client resolves `tucount.local`. The desktop proved it on
-macOS; nothing has resolved it to an *Android* primary.
+Still unverified: whether the POS app resolves `tucount.local`. The desktop proved
+resolution on macOS; nothing has yet resolved it to an *Android* primary.
+
+## Setting up a pair
+
+On the terminal that should be the main one, tap **Make this the main terminal**. On the
+other, find it under **Other terminals found** — mDNS puts it there, nobody types an
+address — tap **Connect to this**, and enter the code from the first terminal's screen.
+That single action sets the shared code, the role and the peer address together.
+
+The code is eight characters from an alphabet with no `0`/`O` or `1`/`I`, shown as
+`2J7J-6A2P`, so it can be read aloud across a shop. The previous 32-character hex token
+was unusable: nobody transcribes that correctly between two tablets.
 
 ## Notes
 

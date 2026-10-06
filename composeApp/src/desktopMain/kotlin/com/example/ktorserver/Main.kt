@@ -15,6 +15,7 @@ import com.example.ktorserver.server.DesktopServerController
 import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.server.JmdnsServiceAdvertiser
+import com.example.ktorserver.server.PairingCoordinator
 import com.example.ktorserver.server.PeerMonitor
 import com.example.ktorserver.server.PromotionCoordinator
 import com.example.ktorserver.security.SecretsStore
@@ -49,11 +50,13 @@ fun main() = application {
     val replicator = remember {
         HttpChangeReplicator(store, database.changeLogDao(), { secrets.load().nodeToken })
     }
+    val advertiser = remember { JmdnsServiceAdvertiser() }
+    val pairing = remember { PairingCoordinator(store, secrets) }
     val monitor = remember {
         PeerMonitor(
             store = store,
             nodeToken = { secrets.load().nodeToken },
-            advertiser = JmdnsServiceAdvertiser(),
+            advertiser = advertiser,
             servicePort = port,
         )
     }
@@ -103,6 +106,9 @@ fun main() = application {
                 primaryUnavailable = monitor.primaryUnavailable,
                 startupConfirmed = monitor.startupConfirmed,
                 promote = { force, reason -> promotion.promote(force, reason) },
+                discovered = advertiser.peers,
+                pairAsSecondary = { peer, code -> pairing.pairAsSecondary(peer, code) },
+                makePrimary = { pairing.makePrimary() },
             ),
         )
     }

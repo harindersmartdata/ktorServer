@@ -61,8 +61,9 @@ class SecretsStore(
     }
 
     /** Replaces the node token — used when pairing this terminal with another. */
-    suspend fun setNodeToken(token: String): Secrets {
-        require(token.length >= MIN_LENGTH) { "Token must be at least $MIN_LENGTH characters" }
+    suspend fun setNodeToken(raw: String): Secrets {
+        val token = normalise(raw)
+        require(token.length >= MIN_LENGTH) { "Code must be at least $MIN_LENGTH characters" }
         val state = store.current()
         dao.put(state.copy(nodeToken = token))
         logger.warn("Node token replaced; this terminal can only pair with one holding the same value")
@@ -70,13 +71,41 @@ class SecretsStore(
     }
 
     private fun generate(kind: String): String {
-        val token = Uuid.random().toString().replace("-", "")
-        logger.warn("Generated a new $kind token. Copy it to the other terminal to pair them.")
+        val token = if (kind == "node") pairingCode() else Uuid.random().toString().replace("-", "")
+        logger.warn("Generated a new $kind token.")
         return token
     }
 
+    /**
+     * A code a person can read off one screen and type into another.
+     *
+     * The previous 32-character hex token was unusable in a shop: nobody is going to
+     * transcribe that correctly from a tablet to a phone. Eight characters from an
+     * alphabet with no 0/O or 1/I is about 40 bits, which is appropriate here — an
+     * attacker also has to be on the shop network, and physical access to the terminal
+     * is needed to read the code in the first place.
+     */
+    private fun pairingCode(): String {
+        val raw = Uuid.random().toString().filter { it.isLetterOrDigit() }.uppercase()
+        return (0 until CODE_LENGTH)
+            .map { ALPHABET[(raw[it].code + it) % ALPHABET.length] }
+            .joinToString("")
+    }
+
     companion object {
-        const val MIN_LENGTH = 16
+        const val MIN_LENGTH = 8
+        const val CODE_LENGTH = 8
+
+        /** No 0/O, 1/I/L — the characters people get wrong reading aloud. */
+        private const val ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+        /** Displayed in groups so it can be read out loud. */
+        fun format(code: String): String =
+            if (code.length == CODE_LENGTH) "${code.take(4)}-${code.drop(4)}" else code
+
+        /** Accepts what a person typed: any case, with or without the dash. */
+        fun normalise(entered: String): String =
+            entered.filter { it.isLetterOrDigit() }.uppercase()
     }
 }
 

@@ -159,6 +159,11 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
      */
     suspend fun recordPeerAck(seq: Long) = dao.recordPeerAck(seq)
 
+    /** Records which terminal we are paired with, so discovery follows that one only. */
+    suspend fun rememberPeerNode(nodeId: String) {
+        dao.put(current().copy(peerNodeId = nodeId))
+    }
+
     /** Follows the same peer to a new address, keeping the replication high-water mark. */
     suspend fun followPeerTo(address: String) = dao.updatePeerAddress(address)
 

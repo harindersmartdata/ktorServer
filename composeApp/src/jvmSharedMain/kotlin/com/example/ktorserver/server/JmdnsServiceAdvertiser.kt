@@ -142,7 +142,12 @@ open class JmdnsServiceAdvertiser : ServiceAdvertiser {
             val address = info.inet4Addresses.firstOrNull()?.hostAddress ?: return
             val peer = DiscoveredPeer(nodeId, address, info.port)
 
-            _peers.value = _peers.value.filterNot { it.nodeId == nodeId } + peer
+            // Drop anything at the same address as well as the same id. A terminal that
+            // was reinstalled comes back with a new node id, and mDNS does not always
+            // retract the old announcement — which left the operator choosing between
+            // two entries for one physical terminal, one of them dead.
+            _peers.value = _peers.value
+                .filterNot { it.nodeId == nodeId || it.hostPort == peer.hostPort } + peer
             logger.info("Discovered peer ${nodeId.take(8)} at ${peer.hostPort}")
         }
 

@@ -6,6 +6,7 @@ import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
 import com.example.ktorserver.server.HttpChangeReplicator
 import com.example.ktorserver.server.AndroidServiceAdvertiser
+import com.example.ktorserver.server.PairingCoordinator
 import com.example.ktorserver.server.KtorServer
 import com.example.ktorserver.server.PeerMonitor
 import com.example.ktorserver.security.SecretsStore
@@ -40,11 +41,15 @@ class KtorServerApp : Application() {
         HttpChangeReplicator(replicationStore, changeLogDao, { secrets.load().nodeToken })
     }
 
+    val advertiser by lazy { AndroidServiceAdvertiser(this) }
+
+    val pairingCoordinator by lazy { PairingCoordinator(replicationStore, secrets) }
+
     val peerMonitor by lazy {
         PeerMonitor(
             store = replicationStore,
             nodeToken = { secrets.load().nodeToken },
-            advertiser = AndroidServiceAdvertiser(this),
+            advertiser = advertiser,
             servicePort = KtorServer.DEFAULT_PORT,
         )
     }

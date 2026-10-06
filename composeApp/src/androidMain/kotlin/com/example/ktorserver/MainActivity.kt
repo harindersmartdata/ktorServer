@@ -52,6 +52,11 @@ class MainActivity : ComponentActivity() {
                     primaryUnavailable = app.peerMonitor.primaryUnavailable,
                     startupConfirmed = app.peerMonitor.startupConfirmed,
                     promote = { force, reason -> app.promotionCoordinator.promote(force, reason) },
+                    discovered = app.advertiser.peers,
+                    pairAsSecondary = { peer, code ->
+                        app.pairingCoordinator.pairAsSecondary(peer, code)
+                    },
+                    makePrimary = { app.pairingCoordinator.makePrimary() },
                 ),
                 onOpenBatterySettings = {
                     runCatching {

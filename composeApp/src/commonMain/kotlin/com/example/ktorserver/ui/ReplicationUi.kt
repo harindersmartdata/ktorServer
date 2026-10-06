@@ -1,6 +1,8 @@
 package com.example.ktorserver.ui
 
 import com.example.ktorserver.data.ReplicationState
+import com.example.ktorserver.server.DiscoveredPeer
+import com.example.ktorserver.server.PairingCoordinator
 import com.example.ktorserver.server.PromotionCoordinator
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,4 +20,10 @@ class ReplicationUi(
      * old primary turns out to still be alive.
      */
     val promote: suspend (force: Boolean, reason: String?) -> PromotionCoordinator.Outcome,
+    /** Terminals mDNS has found, so nobody has to type an address. */
+    val discovered: StateFlow<List<DiscoveredPeer>>,
+    /** Joins this terminal to another as its secondary, in one action. */
+    val pairAsSecondary: suspend (DiscoveredPeer, String) -> PairingCoordinator.Result,
+    /** Makes this terminal the primary of the pair. */
+    val makePrimary: suspend () -> PairingCoordinator.Result,
 )
