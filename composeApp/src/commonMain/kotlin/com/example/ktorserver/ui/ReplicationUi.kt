@@ -26,4 +26,6 @@ class ReplicationUi(
     val pairAsSecondary: suspend (DiscoveredPeer, String) -> PairingCoordinator.Result,
     /** Makes this terminal the primary of the pair. */
     val makePrimary: suspend () -> PairingCoordinator.Result,
+    /** Turns the token requirement on `/users` on or off. */
+    val setRequireAuth: suspend (Boolean) -> Unit,
 )

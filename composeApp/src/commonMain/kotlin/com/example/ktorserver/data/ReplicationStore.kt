@@ -143,6 +143,11 @@ class ReplicationStore(private val dao: ReplicationStateDao) {
         return state
     }
 
+    /** Turns the token requirement on `/users` on or off. */
+    suspend fun setRequireClientAuth(required: Boolean) {
+        dao.put(current().copy(requireClientAuth = required))
+    }
+
     /** True when this node may accept writes. */
     suspend fun isPrimary(): Boolean = current().role == NodeRole.PRIMARY
 

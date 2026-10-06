@@ -25,6 +25,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -207,13 +208,61 @@ private fun ReplicationCard(replication: ReplicationUi) {
                 Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
             }
 
+            // Always offered, whatever the current role: a terminal that has been set
+            // up once must still be changeable without reinstalling it.
+            if (role != NodeRole.PRIMARY) {
+                Spacer(Modifier.size(4.dp))
+                Button(onClick = {
+                    scope.launch {
+                        if (role == NodeRole.UNCONFIGURED) {
+                            replication.makePrimary()
+                        } else {
+                            // Already a secondary, so this is a promotion and gets the
+                            // check that the other terminal has actually stood down.
+                            val outcome = replication.promote(
+                                false,
+                                "Promoted from the terminal screen",
+                            )
+                            if (outcome is PromotionCoordinator.Outcome.Refused) refusal = outcome
+                        }
+                    }
+                }) { Text("Make this the main terminal") }
+            } else {
+                Spacer(Modifier.size(4.dp))
+                Text(
+                    "This is the main terminal. Sales are stored here.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            Spacer(Modifier.size(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Require a code for the API", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (state?.requireClientAuth == true) {
+                            "The POS app must send the code with every request."
+                        } else {
+                            "Off — anything on this network can read and write."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = state?.requireClientAuth == true,
+                    onCheckedChange = { want -> scope.launch { replication.setRequireAuth(want) } },
+                )
+            }
+
             Spacer(Modifier.size(4.dp))
             PairingSection(
                 code = state?.nodeToken,
-                role = role,
                 discovered = replication.discovered,
                 onPairWith = { peer, entered -> replication.pairAsSecondary(peer, entered) },
-                onMakePrimary = { replication.makePrimary() },
             )
 
             if (role == NodeRole.PRIMARY && !confirmed) {
@@ -276,10 +325,8 @@ private fun ReplicationCard(replication: ReplicationUi) {
 @Composable
 private fun PairingSection(
     code: String?,
-    role: NodeRole,
     discovered: StateFlow<List<DiscoveredPeer>>,
     onPairWith: suspend (DiscoveredPeer, String) -> PairingCoordinator.Result,
-    onMakePrimary: suspend () -> PairingCoordinator.Result,
 ) {
     val peers by discovered.collectAsState()
     val scope = rememberCoroutineScope()
@@ -300,13 +347,6 @@ private fun PairingSection(
             "Read this out when joining the other terminal to this one.",
             style = MaterialTheme.typography.bodySmall,
         )
-    }
-
-    if (role == NodeRole.UNCONFIGURED) {
-        Spacer(Modifier.size(8.dp))
-        Button(onClick = { scope.launch { onMakePrimary() } }) {
-            Text("Make this the main terminal")
-        }
     }
 
     Spacer(Modifier.size(8.dp))

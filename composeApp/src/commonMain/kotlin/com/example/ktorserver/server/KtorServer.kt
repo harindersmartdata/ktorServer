@@ -39,6 +39,7 @@ import io.ktor.server.application.createApplicationPlugin
 import io.ktor.server.auth.Authentication
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.bearer
+import io.ktor.server.auth.principal
 import io.ktor.server.application.log
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -219,7 +220,7 @@ fun Application.apiModule(
                 ?.removePrefix("Bearer ")
                 ?.trim()
             val known = secrets?.invoke()
-            val authorised = known == null || presented != null && (
+            val authorised = known == null || !state.requireClientAuth || presented != null && (
                 constantTimeEquals(presented, known.nodeToken) ||
                     constantTimeEquals(presented, known.clientToken)
                 )
@@ -251,7 +252,7 @@ fun Application.apiModule(
 
         // Discovery is reachable with EITHER token: a till cannot route its traffic
         // without it, and it reveals only which terminal to talk to.
-        authenticatedAs(secrets, "client") {
+        authenticatedAs(secrets, "client", optional = true) {
             /**
              * Where the primary is, as far as this node knows.
              *
@@ -622,17 +623,19 @@ fun Application.apiModule(
 
         }
 
-        authenticatedAs(secrets, "client") {
+        authenticatedAs(secrets, "client", optional = true) {
         route("/users") {
 
             // GET /users -> list every user
             get {
+                if (!call.allowedAsClient(store)) return@get
                 val users = repository.all()
                 call.respond(UsersResponse(count = users.size, users = users))
             }
 
             // GET /users/{id} -> one user
             get("/{id}") {
+                if (!call.allowedAsClient(store)) return@get
                 val id = call.parameters["id"]?.takeIf { it.isNotBlank() }
                     ?: return@get call.respond(
                         HttpStatusCode.BadRequest,
@@ -650,6 +653,7 @@ fun Application.apiModule(
 
             // POST /users -> create a user
             post {
+                if (!call.allowedAsClient(store)) return@post
                 call.requirePrimary(store, peerMonitor) ?: return@post
 
                 val body = call.receive<CreateUserRequest>()
@@ -692,6 +696,7 @@ fun Application.apiModule(
 
             // DELETE /users/{id}
             delete("/{id}") {
+                if (!call.allowedAsClient(store)) return@delete
                 call.requirePrimary(store, peerMonitor) ?: return@delete
 
                 val id = call.parameters["id"]?.takeIf { it.isNotBlank() }
@@ -721,9 +726,35 @@ fun Application.apiModule(
 private fun io.ktor.server.routing.Route.authenticatedAs(
     secrets: (suspend () -> Secrets)?,
     provider: String,
+    optional: Boolean = false,
     build: io.ktor.server.routing.Route.() -> Unit,
 ) {
-    if (secrets == null) build() else authenticate(provider) { build() }
+    if (secrets == null) build() else authenticate(provider, optional = optional) { build() }
+}
+
+/**
+ * Enforces the token on the data routes only when this terminal is set to require it.
+ *
+ * Off by default: during setup and development the API has to be reachable from a
+ * browser, and a browser cannot send an Authorization header. The replication and
+ * operator routes are deliberately not covered by this — they are where someone on the
+ * shop network could write into the database or take over a terminal.
+ */
+private suspend fun ApplicationCall.allowedAsClient(
+    store: com.example.ktorserver.data.ReplicationStore,
+): Boolean {
+    if (!store.current().requireClientAuth) return true
+    if (principal<Any>() != null) return true
+
+    respond(
+        HttpStatusCode.Unauthorized,
+        ErrorResponse(
+            "This terminal requires a code for API access",
+            "Send it as 'Authorization: Bearer <code>', or turn the requirement off on " +
+                "the terminal's screen",
+        ),
+    )
+    return false
 }
 
 /** Marks a caller holding the node token. */

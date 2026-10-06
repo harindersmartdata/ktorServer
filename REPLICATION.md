@@ -291,6 +291,19 @@ lag.
 Still unverified: whether the POS app resolves `tucount.local`. The desktop proved
 resolution on macOS; nothing has yet resolved it to an *Android* primary.
 
+## API authentication is optional
+
+`/users` does **not** require a code by default. A browser cannot send an Authorization
+header, so requiring one made the API unreachable during setup and development. There is
+a switch on each terminal's screen to turn the requirement on.
+
+`/replication/` routes are **not** covered by that switch and always require the node
+code. That is the surface where someone on the shop network could push rows straight
+into the database or promote a terminal; leaving it open is never worth it.
+
+Turn the requirement on before a shop goes live, and remember it is still not TLS — see
+step 8.
+
 ## Setting up a pair
 
 On the terminal that should be the main one, tap **Make this the main terminal**. On the

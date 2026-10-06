@@ -107,6 +107,15 @@ data class ReplicationState(
     val nodeToken: String? = null,
     /** Secret for tills calling `/users`. Deliberately weaker in scope than nodeToken. */
     val clientToken: String? = null,
+    /**
+     * Whether `/users` requires a token.
+     *
+     * Off by default so the API can be opened in a browser or curled while building.
+     * `/replication/` routes are NOT covered by this and always require the node token:
+     * that is the surface where someone on the shop wifi could inject rows into the
+     * database or promote a terminal, and it is never worth leaving open.
+     */
+    val requireClientAuth: Boolean = false,
 ) {
     companion object { const val SINGLETON_ID = 1 }
 }

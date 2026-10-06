@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
                         app.pairingCoordinator.pairAsSecondary(peer, code)
                     },
                     makePrimary = { app.pairingCoordinator.makePrimary() },
+                    setRequireAuth = { app.replicationStore.setRequireClientAuth(it) },
                 ),
                 onOpenBatterySettings = {
                     runCatching {

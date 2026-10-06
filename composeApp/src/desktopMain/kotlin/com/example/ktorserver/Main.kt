@@ -109,6 +109,7 @@ fun main() = application {
                 discovered = advertiser.peers,
                 pairAsSecondary = { peer, code -> pairing.pairAsSecondary(peer, code) },
                 makePrimary = { pairing.makePrimary() },
+                setRequireAuth = { store.setRequireClientAuth(it) },
             ),
         )
     }
