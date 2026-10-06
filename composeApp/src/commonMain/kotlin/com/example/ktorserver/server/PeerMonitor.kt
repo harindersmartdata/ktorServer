@@ -98,7 +98,7 @@ class PeerMonitor(
      * Neither terminal is primary, and both are up.
      *
      * A quiet way to lose a shop: every write is refused with 421 and the redirect
-     * points at a terminal that refuses it too, so tills fail with nowhere to go while
+     * points at a terminal that refuses it too, so terminals fail with nowhere to go while
      * both screens look healthy. It happened here after a run of forced promotions left
      * both sides demoted, and nothing said so. Reachability is required before raising
      * it, because a peer that is merely unreachable might well be primary.
@@ -116,12 +116,12 @@ class PeerMonitor(
      *
      * A **latch**, deliberately, not a recomputed condition. Recomputing it each tick
      * made a freshly promoted node reject writes until the next heartbeat, which would
-     * stop a till for seconds at exactly the worst moment. Role is read live from the
+     * stop a terminal for seconds at exactly the worst moment. Role is read live from the
      * database at request time; this only answers "have we finished checking yet".
      *
      * The grace fallback is a compromise: if the peer is unreachable we genuinely
      * cannot know, and refusing to trade until it answers would let a dead secondary
-     * keep the till shut.
+     * keep the terminal shut.
      */
     private val _startupConfirmed = MutableStateFlow(false)
     val startupConfirmed: StateFlow<Boolean> = _startupConfirmed.asStateFlow()
@@ -278,7 +278,7 @@ class PeerMonitor(
             state.peerNodeId != null -> seen.firstOrNull { it.nodeId == state.peerNodeId }
             // Before the first contact a single visible terminal is unambiguous; more
             // than one and an operator has to say which, since guessing could pair the
-            // wrong pair of tills.
+            // wrong pair of terminals.
             seen.size == 1 -> seen.single()
             else -> null
         } ?: return

@@ -18,7 +18,7 @@ class AndroidServiceAdvertiser(context: Context) : JmdnsServiceAdvertiser() {
     override fun onNetworkStart() {
         if (lock != null) return
         val wifi = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        lock = wifi.createMulticastLock("tucount-mdns").apply {
+        lock = wifi.createMulticastLock("trucount-mdns").apply {
             setReferenceCounted(false)
             acquire()
         }

@@ -12,7 +12,7 @@ codebase:
 | Windows `.exe` | `./gradlew :composeApp:packageReleaseExe` | **not yet — must run on Windows** |
 
 The desktop build was verified end-to-end on macOS: server starts with the process,
-Room created `~/.tucount-server/ktor-server.db`, the seed callback ran, and
+Room created `~/.trucount-server/ktor-server.db`, the seed callback ran, and
 `GET/POST/DELETE` returned 200/201/204 with 400/404/409 on the error paths.
 
 Because the desktop target is plain Kotlin/JVM, "runs on macOS" and "runs on Windows"
@@ -92,7 +92,7 @@ Still missing even after a successful compile: an Xcode project to host the fram
 
 **Remember iOS can only serve in the foreground.** The OS suspends a backgrounded app
 and the listening socket dies with it; there is no foreground-service equivalent. Fine
-for internal testing, not viable as a till.
+for internal testing, not viable as a terminal.
 
 ## Local environment notes (macOS machine)
 

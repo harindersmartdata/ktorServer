@@ -12,7 +12,7 @@ import kotlin.uuid.Uuid
  *
  * Two tiers on purpose. The node token admits a caller to `/replication/` routes — applying
  * change batches, promoting a terminal, reading the failover history. The client token
- * only admits a caller to the data routes. A till therefore cannot promote a server or
+ * only admits a caller to the data routes. A terminal therefore cannot promote a server or
  * inject replication batches even if its credentials are extracted from the device,
  * which is the realistic threat in a shop.
  *

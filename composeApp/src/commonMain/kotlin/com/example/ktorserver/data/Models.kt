@@ -36,7 +36,7 @@ enum class ChangeOp { INSERT, UPDATE, DELETE }
  * One row-level change, append-only, in origin order.
  *
  * This is the unit of replication. Nothing in it is `users`-specific: [tableName] and
- * the JSON [payload] mean a new TuCount table replicates without touching this code.
+ * the JSON [payload] mean a new TruCount table replicates without touching this code.
  *
  * Ordering is by ([nodeId], [seq]) — a logical sequence, never wall-clock time, because
  * two terminals' clocks disagree and sales would replay out of order.
@@ -105,7 +105,7 @@ data class ReplicationState(
      * Generated on first run and shown on screen so it can be copied to the other one.
      */
     val nodeToken: String? = null,
-    /** Secret for tills calling `/users`. Deliberately weaker in scope than nodeToken. */
+    /** Secret for terminals calling `/users`. Deliberately weaker in scope than nodeToken. */
     val clientToken: String? = null,
     /**
      * Whether `/users` requires a token.
@@ -301,7 +301,7 @@ data class PromotionRefused(
  * On a primary these are simply the replication backlog. On a node that has since been
  * demoted they are **orphans**: sales taken while it believed it was in charge, which
  * the terminal that superseded it has never seen. Nothing merges them automatically —
- * two tills can easily hold different versions of the same order, and picking a winner
+ * two terminals can easily hold different versions of the same order, and picking a winner
  * by timestamp loses money.
  */
 @Serializable

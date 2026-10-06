@@ -181,9 +181,9 @@ compose.desktop {
             // Exe/Msi are produced by jpackage, which does NOT cross-compile:
             // these targets only build when Gradle runs on Windows.
             targetFormats(TargetFormat.Exe, TargetFormat.Msi, TargetFormat.Dmg)
-            packageName = "TuCountServer"
+            packageName = "TruCountServer"
             packageVersion = "1.0.0"
-            description = "TuCount local HTTP server"
+            description = "TruCount local HTTP server"
 
             windows {
                 menu = true
@@ -203,7 +203,7 @@ compose.desktop {
  */
 tasks.register<JavaExec>("clientProbe") {
     group = "verification"
-    description = "Drives TuCountClient against running servers to observe failover"
+    description = "Drives TruCountClient against running servers to observe failover"
 
     val desktopMain = kotlin.targets.getByName("desktop")
         .compilations.getByName("main")

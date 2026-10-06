@@ -80,7 +80,7 @@ abstract class WriteDao {
     /**
      * Applies a batch received from the peer, atomically and idempotently.
      *
-     * The whole batch is one transaction, so a multi-table TuCount sale either lands
+     * The whole batch is one transaction, so a multi-table TruCount sale either lands
      * complete or not at all — a half-applied order is worse than a missing one.
      *
      * Idempotency comes from the log's (nodeId, seq) primary key: if the entry is

@@ -74,7 +74,7 @@ object NoReplication : ChangeReplicator {
  * the secondary is healthy. Whenever it is not, this is async replication, and a
  * failover during that window loses whatever had not been acknowledged. The alternative
  * -- refusing sales when the secondary is down -- was rejected, because a dead
- * secondary must not be able to stop the till.
+ * secondary must not be able to stop the terminal.
  */
 class HttpChangeReplicator(
     private val store: ReplicationStore,
@@ -147,7 +147,7 @@ class HttpChangeReplicator(
                 false
             }
         } catch (cause: Exception) {
-            // Agreed behaviour: do not block the till. The entries stay in change_log
+            // Agreed behaviour: do not block the terminal. The entries stay in change_log
             // and the catch-up loop retries.
             _pending.value = changeLog.pendingSince(state.nodeId, state.peerAckedSeq)
             _peerReachable.value = false

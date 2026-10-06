@@ -6,8 +6,8 @@ import com.example.ktorserver.data.NodeRole
  * Plain-language names for things the screen used to state in protocol terms.
  *
  * Shop staff are the people who will read this screen at eight in the morning when a
- * till will not ring up a sale. "Replication SECONDARY · epoch 7" tells them nothing
- * they can act on; "Backup till — copying sales from the main till" does.
+ * terminal will not ring up a sale. "Replication SECONDARY · epoch 7" tells them nothing
+ * they can act on; "Backup terminal — copying sales from the main terminal" does.
  *
  * The technical wording is not deleted, only moved: it is still on screen under
  * Technical details, where it is what an engineer needs when something is genuinely wrong.
@@ -15,8 +15,8 @@ import com.example.ktorserver.data.NodeRole
 object Wording {
 
     fun role(role: NodeRole): String = when (role) {
-        NodeRole.PRIMARY -> "Main till"
-        NodeRole.SECONDARY -> "Backup till"
+        NodeRole.PRIMARY -> "Main terminal"
+        NodeRole.SECONDARY -> "Backup terminal"
         NodeRole.UNCONFIGURED -> "Not set up"
     }
 
@@ -28,10 +28,10 @@ object Wording {
         primaryUnavailable: Boolean,
     ): String = when {
         !running -> "Stopped"
-        noPrimaryAnywhere -> "No till is taking sales"
-        primaryUnavailable -> "The main till is not responding"
+        noPrimaryAnywhere -> "No terminal is taking sales"
+        primaryUnavailable -> "The main terminal is not responding"
         role == NodeRole.PRIMARY -> "Taking sales"
-        role == NodeRole.SECONDARY -> "Backing up the main till"
+        role == NodeRole.SECONDARY -> "Backing up the main terminal"
         else -> "Not set up yet"
     }
 
@@ -44,12 +44,12 @@ object Wording {
         peerReachable: Boolean,
         unreplicated: Long,
     ): String? = when {
-        !running -> "This till is not serving. Tap Start below."
-        noPrimaryAnywhere -> "Both tills are running but neither is the main one, so " +
-            "sales will be refused. Make one of them the main till."
-        primaryUnavailable -> "If the main till really is switched off or broken, make " +
-            "this one the main till. If it is still working, leave this alone."
-        role == NodeRole.UNCONFIGURED -> "Choose whether this is the main till or a " +
+        !running -> "This terminal is not serving. Tap Start below."
+        noPrimaryAnywhere -> "Both terminals are running but neither is the main one, so " +
+            "sales will be refused. Make one of them the main terminal."
+        primaryUnavailable -> "If the main terminal really is switched off or broken, make " +
+            "this one the main terminal. If it is still working, leave this alone."
+        role == NodeRole.UNCONFIGURED -> "Choose whether this is the main terminal or a " +
             "backup for one that already exists."
         role == NodeRole.PRIMARY && !peerReachable ->
             "No backup is connected. Sales are safe here, but there is no second copy."
@@ -65,11 +65,11 @@ object Wording {
         peerPaired: Boolean,
         unreplicated: Long,
     ): String = when {
-        !peerPaired -> "No other till connected yet"
-        !peerReachable -> "Other till not reachable"
+        !peerPaired -> "No other terminal connected yet"
+        !peerReachable -> "Other terminal not reachable"
         role == NodeRole.PRIMARY && unreplicated > 0 -> "Backup connected · $unreplicated to copy"
         role == NodeRole.PRIMARY -> "Backup connected and up to date"
-        else -> "Main till connected"
+        else -> "Main terminal connected"
     }
 
     /** True when the headline should read as a problem rather than business as usual. */

@@ -1,13 +1,13 @@
 package com.example.ktorserver
 
-import com.example.ktorserver.client.TuCountClient
+import com.example.ktorserver.client.TruCountClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 /**
- * Drives [TuCountClient] against a running pair so failover can be observed.
+ * Drives [TruCountClient] against a running pair so failover can be observed.
  *
  * Writes once a second and prints which terminal served each call. Kill the primary
  * part-way through and promote the other: the point is that the gap shows up as a few
@@ -21,7 +21,7 @@ fun main(args: Array<String>) = runBlocking {
         .ifEmpty { listOf("127.0.0.1:9100", "127.0.0.1:9101") }
     val rounds = args.lastOrNull()?.toIntOrNull() ?: 30
 
-    val client = TuCountClient(addresses)
+    val client = TruCountClient(addresses)
     println("probe: candidates=$addresses rounds=$rounds")
 
     var ok = 0

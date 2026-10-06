@@ -147,19 +147,19 @@ fun Application.apiModule(
     )
 
     // Two tiers: the node token reaches /replication/ routes (replication batches, promotion,
-    // failover history); the client token only reaches the data routes. A till's
+    // failover history); the client token only reaches the data routes. A terminal's
     // credentials being lifted off a device must not let someone promote a terminal.
     if (secrets != null) {
         install(Authentication) {
             bearer("node") {
-                realm = "TuCount node"
+                realm = "TruCount node"
                 authenticate { credential ->
                     val expected = secrets().nodeToken
                     if (constantTimeEquals(credential.token, expected)) NodeCaller else null
                 }
             }
             bearer("client") {
-                realm = "TuCount client"
+                realm = "TruCount client"
                 authenticate { credential ->
                     val current = secrets()
                     when {
@@ -250,7 +250,7 @@ fun Application.apiModule(
             )
         }
 
-        // Discovery is reachable with EITHER token: a till cannot route its traffic
+        // Discovery is reachable with EITHER token: a terminal cannot route its traffic
         // without it, and it reveals only which terminal to talk to.
         authenticatedAs(secrets, "client", optional = true) {
             /**
@@ -538,7 +538,7 @@ fun Application.apiModule(
              *
              * Deliberately explicit. An orphaned INSERT can resurrect a row the new
              * primary deliberately deleted, and an orphaned sale may duplicate one that
-             * was re-rung on the other till. Somebody has to look first.
+             * was re-rung on the other terminal. Somebody has to look first.
              */
             post("/orphans/handover") {
                 val state = store.current()

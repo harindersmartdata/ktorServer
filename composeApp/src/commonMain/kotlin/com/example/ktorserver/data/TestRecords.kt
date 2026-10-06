@@ -4,7 +4,7 @@ import com.example.ktorserver.server.ChangeReplicator
 import kotlinx.datetime.Clock
 
 /**
- * Inserts a throwaway record so somebody can watch it appear on the other till.
+ * Inserts a throwaway record so somebody can watch it appear on the other terminal.
  *
  * Goes through exactly the same path as a real sale — logged write, then a push to the
  * peer — because a test that took a shortcut would prove nothing about whether real
@@ -19,7 +19,7 @@ class TestRecordInserter(
     /** Returns a sentence to show the operator. */
     suspend fun insert(): String {
         if (store.current().role != NodeRole.PRIMARY) {
-            return "Only the main till can add records. This one is the backup."
+            return "Only the main terminal can add records. This one is the backup."
         }
 
         val stamp = Clock.System.now().toEpochMilliseconds()

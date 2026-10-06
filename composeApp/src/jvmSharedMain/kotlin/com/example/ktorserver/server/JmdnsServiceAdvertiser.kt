@@ -18,9 +18,9 @@ import javax.jmdns.ServiceListener
  * Two responders, because JmDNS fixes its host name when it is created and we need two
  * different ones:
  *
- *  - **self** — always running, host `tucount-<id>.local`, publishing `_tucount._tcp`
+ *  - **self** — always running, host `trucount-<id>.local`, publishing `_trucount._tcp`
  *    so the other terminal can find this one whatever its role.
- *  - **primary** — only while this terminal is primary, host `tucount.local`, which is
+ *  - **primary** — only while this terminal is primary, host `trucount.local`, which is
  *    the single address the POS app is configured with.
  *
  * [onNetworkStart] and [onNetworkStop] exist for Android, which silently drops multicast
@@ -88,7 +88,7 @@ open class JmdnsServiceAdvertiser : ServiceAdvertiser {
                 val responder =
                     JmDNS.create(InetAddress.getByName(ipv4), ServiceAdvertiser.HOST_NAME)
                 responder.registerService(
-                    ServiceInfo.create("_http._tcp.local.", "TuCount", port, "role=primary")
+                    ServiceInfo.create("_http._tcp.local.", "TruCount", port, "role=primary")
                 )
                 primaryResponder = responder
                 announcedPrimary = wanted
@@ -159,6 +159,6 @@ open class JmdnsServiceAdvertiser : ServiceAdvertiser {
     }
 
     private companion object {
-        const val HOST_PREFIX = "tucount-"
+        const val HOST_PREFIX = "trucount-"
     }
 }

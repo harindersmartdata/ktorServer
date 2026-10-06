@@ -56,10 +56,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
- * The whole screen, written for whoever is standing at the till rather than for whoever
+ * The whole screen, written for whoever is standing at the terminal rather than for whoever
  * wrote the replication.
  *
- * Everything a shop needs is above the fold and in plain words: whether this till is
+ * Everything a shop needs is above the fold and in plain words: whether this terminal is
  * working, which of the two it is, and what to do when it is not. The protocol detail —
  * roles, epochs, sequence numbers, endpoints — is still here, under Technical details,
  * because it is exactly what is needed when something is genuinely broken.
@@ -110,7 +110,7 @@ fun ServerScreen(
     var showDetails by remember { mutableStateOf(false) }
     var testOutcome by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Till server") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("Terminal server") }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -155,7 +155,7 @@ fun ServerScreen(
                                 } else {
                                     val outcome = replication.promote(
                                         false,
-                                        "Promoted from the till screen",
+                                        "Promoted from the terminal screen",
                                     )
                                     if (outcome is PromotionCoordinator.Outcome.Refused) {
                                         refusal = outcome
@@ -227,7 +227,7 @@ fun ServerScreen(
             onForce = {
                 refusal = null
                 scope.launch {
-                    replication.promote(true, "Forced from the till screen despite the other answering")
+                    replication.promote(true, "Forced from the terminal screen despite the other answering")
                 }
             },
         )
@@ -238,10 +238,10 @@ private fun <T> constFlow(value: T): StateFlow<T> =
     kotlinx.coroutines.flow.MutableStateFlow(value)
 
 /**
- * Adds a throwaway record and shows the count, so the two tills can be compared by eye.
+ * Adds a throwaway record and shows the count, so the two terminals can be compared by eye.
  *
  * The count is shown on both: on the backup there is nothing to press, but watching the
- * number follow the main till is the whole point of the check.
+ * number follow the main terminal is the whole point of the check.
  */
 @Composable
 private fun TestRecordCard(
@@ -254,7 +254,7 @@ private fun TestRecordCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Records on this till",
+                    "Records on this terminal",
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -268,12 +268,12 @@ private fun TestRecordCard(
             if (isMain) {
                 Button(onClick = onAdd) { Text("Add a test record") }
                 Text(
-                    "The number on the backup till should match within a second.",
+                    "The number on the backup terminal should match within a second.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
                 Text(
-                    "This number is copied from the main till. It should match the " +
+                    "This number is copied from the main terminal. It should match the " +
                         "number shown there.",
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -287,7 +287,7 @@ private fun TestRecordCard(
     }
 }
 
-/** The one thing somebody glances at: is this till doing its job? */
+/** The one thing somebody glances at: is this terminal doing its job? */
 @Composable
 private fun StatusCard(
     running: Boolean,
@@ -359,8 +359,8 @@ private fun ActionCard(
     onBecomeMain: () -> Unit,
 ) {
     // Only offered when there is something to fix. A healthy backup showing a
-    // "make this the main till" button invites somebody to press it, and pressing it
-    // while the main till is working is how a shop ends up with two sets of takings —
+    // "make this the main terminal" button invites somebody to press it, and pressing it
+    // while the main terminal is working is how a shop ends up with two sets of takings —
     // which is exactly what happened during testing. Deliberate changeovers go through
     // Technical details.
     val somethingToFix = noPrimary || primaryGone || role == NodeRole.UNCONFIGURED
@@ -373,8 +373,8 @@ private fun ActionCard(
             Text(
                 when {
                     noPrimary -> "Nothing is taking sales"
-                    primaryGone -> "The main till has stopped answering"
-                    else -> "Set this till up"
+                    primaryGone -> "The main terminal has stopped answering"
+                    else -> "Set this terminal up"
                 },
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -385,18 +385,18 @@ private fun ActionCard(
                 } else {
                     ButtonDefaults.buttonColors()
                 },
-            ) { Text("Make this the main till") }
+            ) { Text("Make this the main terminal") }
         }
     }
 
     if (confirming) {
         AlertDialog(
             onDismissRequest = { confirming = false },
-            title = { Text("Make this the main till?") },
+            title = { Text("Make this the main terminal?") },
             text = {
                 Text(
-                    "This till will start taking and storing sales. Only do this if the " +
-                        "other till is really off or broken — if it is still working, both " +
+                    "This terminal will start taking and storing sales. Only do this if the " +
+                        "other terminal is really off or broken — if it is still working, both " +
                         "will take sales and the two sets of takings will have to be sorted " +
                         "out by hand afterwards."
                 )
@@ -411,7 +411,7 @@ private fun ActionCard(
     }
 }
 
-/** Joining the two tills together. Hidden once they are joined. */
+/** Joining the two terminals together. Hidden once they are joined. */
 @Composable
 private fun ConnectCard(
     code: String?,
@@ -427,15 +427,15 @@ private fun ConnectCard(
     var problem by remember { mutableStateOf<String?>(null) }
 
     // Setup is a once-per-shop job. Once the two are joined this only gets in the way,
-    // and on the main till it was offering to turn itself into the backup.
+    // and on the main terminal it was offering to turn itself into the backup.
     if (peerPaired) return
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Connect the two tills", style = MaterialTheme.typography.titleMedium)
+            Text("Connect the two terminals", style = MaterialTheme.typography.titleMedium)
 
             code?.let {
-                Text("This till's code", style = MaterialTheme.typography.bodySmall)
+                Text("This terminal's code", style = MaterialTheme.typography.bodySmall)
                 Text(
                     SecretsStore.format(it),
                     fontFamily = FontFamily.Monospace,
@@ -443,7 +443,7 @@ private fun ConnectCard(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "Read this out when joining the other till to this one.",
+                    "Read this out when joining the other terminal to this one.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -452,12 +452,12 @@ private fun ConnectCard(
 
             if (peers.isEmpty()) {
                 Text(
-                    "No other till found yet. Both must be on the same Wi-Fi with the " +
+                    "No other terminal found yet. Both must be on the same Wi-Fi with the " +
                         "app open.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
-                Text("Other tills on this Wi-Fi", style = MaterialTheme.typography.bodySmall)
+                Text("Other terminals on this Wi-Fi", style = MaterialTheme.typography.bodySmall)
                 peers.forEach { peer ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -467,7 +467,7 @@ private fun ConnectCard(
                         Text(peer.address, Modifier.weight(1f), fontFamily = FontFamily.Monospace)
                         OutlinedButton(onClick = {
                             entered = ""; problem = null; pairingWith = peer
-                        }) { Text("Use as main till") }
+                        }) { Text("Use as main terminal") }
                     }
                 }
             }
@@ -477,10 +477,10 @@ private fun ConnectCard(
     pairingWith?.let { peer ->
         AlertDialog(
             onDismissRequest = { pairingWith = null },
-            title = { Text("Connect to the till at ${peer.address}") },
+            title = { Text("Connect to the terminal at ${peer.address}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("This till will become the backup. Type the code shown on the other one.")
+                    Text("This terminal will become the backup. Type the code shown on the other one.")
                     OutlinedTextField(
                         value = entered,
                         onValueChange = { entered = it; problem = null },
@@ -518,7 +518,7 @@ private fun PosAppCard() {
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Point the till app at", style = MaterialTheme.typography.bodySmall)
+            Text("Point the POS app at", style = MaterialTheme.typography.bodySmall)
             Text(
                 ServiceAdvertiser.url(KtorServer.DEFAULT_PORT),
                 fontFamily = FontFamily.Monospace,
@@ -526,7 +526,7 @@ private fun PosAppCard() {
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                "This address never changes, whichever till is the main one.",
+                "This address never changes, whichever terminal is the main one.",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -601,7 +601,7 @@ private fun TechnicalCard(
 
             // A planned changeover, as opposed to a failover. Deliberately tucked away.
             if (role != NodeRole.PRIMARY) {
-                OutlinedButton(onClick = onBecomeMain) { Text("Make this the main till") }
+                OutlinedButton(onClick = onBecomeMain) { Text("Make this the main terminal") }
             }
 
             onOpenBatterySettings?.let {
@@ -611,7 +611,7 @@ private fun TechnicalCard(
     }
 }
 
-/** Shown only when a promotion is refused because the other till is still answering. */
+/** Shown only when a promotion is refused because the other terminal is still answering. */
 @Composable
 private fun PromotionRefusalDialog(
     refusal: PromotionCoordinator.Outcome.Refused?,
@@ -623,14 +623,14 @@ private fun PromotionRefusalDialog(
         onDismissRequest = onDismiss,
         text = {
             Text(
-                "The other till answered just now and says it is the main one. " +
+                "The other terminal answered just now and says it is the main one. " +
                     "This is not a changeover.\n\n" +
-                    "Carrying on gives you two tills taking sales at the same time, and " +
+                    "Carrying on gives you two terminals taking sales at the same time, and " +
                     "the takings will have to be sorted out by hand. Only continue if you " +
-                    "know the other till is unusable despite answering."
+                    "know the other terminal is unusable despite answering."
             )
         },
-        title = { Text("The other till is still working") },
+        title = { Text("The other terminal is still working") },
         confirmButton = { TextButton(onClick = onForce) { Text("Continue anyway") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

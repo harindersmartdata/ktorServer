@@ -9,7 +9,7 @@ import io.ktor.util.logging.KtorSimpleLogger
  * Turns "pair this terminal with that one" into a single action.
  *
  * Doing it by hand meant setting a token, a role and a peer address separately, in the
- * right order, through three different calls — which is three chances to leave a till
+ * right order, through three different calls — which is three chances to leave a terminal
  * half-configured and no way for the person doing it to tell.
  */
 class PairingCoordinator(

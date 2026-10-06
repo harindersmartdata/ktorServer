@@ -19,7 +19,7 @@ data class DiscoveredPeer(
  * Two jobs, both solving an address that will not stay still:
  *
  *  - **One constant URL for the POS app.** Whichever terminal is primary claims
- *    `tucount.local`, so the app is configured once and keeps working after a failover.
+ *    `trucount.local`, so the app is configured once and keeps working after a failover.
  *  - **Peer discovery.** Every terminal announces itself whatever its role, so the two
  *    find each other by node id rather than by an address DHCP keeps reassigning. Both
  *    devices moved address during a single afternoon of testing; a configured IP would
@@ -42,11 +42,11 @@ interface ServiceAdvertiser {
     fun shutdown()
 
     companion object {
-        /** The name tills are configured with. Changing it means reconfiguring them. */
-        const val HOST_NAME = "tucount"
+        /** The name terminals are configured with. Changing it means reconfiguring them. */
+        const val HOST_NAME = "trucount"
 
         /** mDNS service type both terminals announce themselves under. */
-        const val SERVICE_TYPE = "_tucount._tcp.local."
+        const val SERVICE_TYPE = "_trucount._tcp.local."
 
         /** What an operator puts in the POS app. */
         fun url(port: Int): String = "http://$HOST_NAME.local:$port"

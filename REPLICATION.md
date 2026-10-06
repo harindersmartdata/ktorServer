@@ -18,8 +18,8 @@ network gear is out.
 |---|---|---|
 | 1 | **Synchronous** replication | T1 waits for T2 to ack before confirming a write. |
 | 1a | On T2 unreachable: **keep serving, queue silently** | Sync degrades to async whenever T2 is slow or down. "No data loss" holds *only while T2 is healthy*. Staleness is tracked internally but not surfaced as a loud alert. |
-| 2 | Replicate **everything** | Replication is schema-agnostic — `change_log` carries `tableName` + JSON. New TuCount tables need no replication changes. |
-| 3 | **One constant URL**, `http://tucount.local:8080` | Fixed-IP takeover was withdrawn first (stock Android cannot take over an IP without root), then the candidate list alone was rejected: the POS app needs a single address it is configured with once. Whichever terminal is primary claims the name over mDNS and gives it up on demotion, so the URL never changes and nothing needs reconfiguring after a failover. The `421` redirect and candidate list remain as the fallback for clients that cannot resolve `.local`. |
+| 2 | Replicate **everything** | Replication is schema-agnostic — `change_log` carries `tableName` + JSON. New TruCount tables need no replication changes. |
+| 3 | **One constant URL**, `http://trucount.local:8080` | Fixed-IP takeover was withdrawn first (stock Android cannot take over an IP without root), then the candidate list alone was rejected: the POS app needs a single address it is configured with once. Whichever terminal is primary claims the name over mDNS and gives it up on demotion, so the URL never changes and nothing needs reconfiguring after a failover. The `421` redirect and candidate list remain as the fallback for clients that cannot resolve `.local`. |
 
 ## Steps
 
@@ -36,7 +36,7 @@ network gear is out.
       the higher epoch — was closed in step 4.)
 - [x] **3. Synchronous replication** — `POST /replication/apply` receives batches; the
       primary pushes and waits for the ack before answering the client. Degrades per
-      decision 1a: an unreachable peer does not block the till, the backlog stays in
+      decision 1a: an unreachable peer does not block the terminal, the backlog stays in
       `change_log`, and a catch-up loop drains it when the peer returns. Applying is
       idempotent (keyed on `nodeId, seq`) so a retry after a timeout is harmless, and a
       batch applies in one transaction so a multi-table sale cannot half-land.
@@ -65,7 +65,7 @@ network gear is out.
       confirmation dialog and a second, blunter one for the override.
       **Note:** `promotion_log` is per-node and is not replicated, so reconstructing a
       full failover history means reading it from both terminals.
-- [x] **6. Client redirection** — `TuCountClient` (commonMain) holds both terminal
+- [x] **6. Client redirection** — `TruCountClient` (commonMain) holds both terminal
       addresses and works out which is primary, re-resolving when that changes, so
       failover is invisible to calling code. `GET /replication/primary` is answered by
       **any** node, so one reachable terminal is enough to locate the primary. A write
@@ -77,7 +77,7 @@ network gear is out.
       **Measured:** 22 writes across a real failover — 21 succeeded, the one failure
       being the second when T1 was dead and T2 not yet promoted. All 21 landed.
       **Note:** that gap is as long as a human takes to promote. Manual promotion is
-      what keeps two tills from trading at once; the cost is that the window is human
+      what keeps two terminals from trading at once; the cost is that the window is human
       sized, not machine sized.
 - [x] **7. Recovery + re-sync**
       - *Reverse catch-up needed no code.* A recovered node receives what it missed
@@ -104,13 +104,13 @@ network gear is out.
       `change_log` is never truncated, so bootstrap replays everything ever written.
 - [x] **8. Auth** — bearer tokens in two tiers. The **node** token admits a caller to
       the replication and operator routes (apply, promote, role, orphans, history); the
-      **client** token only reaches `/users`. A till's credentials being lifted off a
+      **client** token only reaches `/users`. A terminal's credentials being lifted off a
       device therefore cannot promote a terminal or inject replication batches.
-      `/replication/primary` takes either, because a till cannot route without it.
+      `/replication/primary` takes either, because a terminal cannot route without it.
       `/health` stays open for watchdogs but returns only liveness to an anonymous
       caller — node id, role, epoch and row counts are not owed to whoever reaches the
       port. Tokens are generated on first run, persisted, shown on screen for pairing,
-      and overridable with `TUCOUNT_NODE_TOKEN` / `TUCOUNT_CLIENT_TOKEN`. Comparison is
+      and overridable with `TRUCOUNT_NODE_TOKEN` / `TRUCOUNT_CLIENT_TOKEN`. Comparison is
       constant-time so a token cannot be recovered a character at a time.
       **Not a substitute for TLS.** The server speaks plain HTTP, so every request
       carries its token in clear text; anyone who can capture packets on the shop LAN
@@ -142,13 +142,13 @@ and demonstrated end to end, including a returning primary standing down. It bou
 damage rather than eliminating it: see the window noted against step 2.
 
 ### Sync cost — *step 3 (done)*
-Per decision 1a, a slow or dead T2 must not stop the till, so the sync guarantee is
+Per decision 1a, a slow or dead T2 must not stop the terminal, so the sync guarantee is
 conditional. Whatever the UI does with that, the lag must be tracked internally or
 catch-up cannot work.
 
 ### Failure detection — *step 4 (done)*
 Timeout tuning is a real trade-off: too short and a Wi-Fi hiccup causes a false
-failover, too long and tills are unusable for minutes. Also: if T2, T3 and T4 each
+failover, too long and terminals are unusable for minutes. Also: if T2, T3 and T4 each
 decide independently that T1 is dead, they can disagree about who is primary.
 
 ### Client redirection — *step 6 (done)*
@@ -233,14 +233,14 @@ the promotions a person made by hand.
 The POS app is configured once with:
 
 ```
-http://tucount.local:8080
+http://trucount.local:8080
 ```
 
 Whichever terminal is primary announces that name over mDNS; a terminal that is demoted
 withdraws it within a heartbeat. Only a primary ever claims it, so two terminals cannot
 answer for it at once.
 
-Verified on macOS: announced as `tucount.local -> 172.24.0.60`, served `/health` and a
+Verified on macOS: announced as `trucount.local -> 172.24.0.60`, served `/health` and a
 `POST /users` through the name, stopped resolving on demotion, and came back on
 promotion.
 
@@ -252,12 +252,12 @@ the system log rather than the app's own, since a silently-filtered responder wo
 identical from inside the app:
 
 ```
-WifiService: acquireMulticastLock uid=10274 lockTag=tucount-mdns
-mDNS - Announcing tucount.local -> 192.168.2.66:8080
+WifiService: acquireMulticastLock uid=10274 lockTag=trucount-mdns
+mDNS - Announcing trucount.local -> 192.168.2.66:8080
 ```
 
 **Still not verified: resolution by a remote client.** Both test devices have so far
-been on different networks from the desktop, so nothing has yet resolved `tucount.local`
+been on different networks from the desktop, so nothing has yet resolved `trucount.local`
 *across* the LAN to an Android primary. `.local` lookup is patchy on some Android
 versions, needs Bonjour on Windows, and some networks block multicast — which is why the
 candidate-list fallback stays in the client. Closing this needs a client and an Android
@@ -271,7 +271,7 @@ carries traffic.
 
 ## Peer discovery
 
-Each terminal announces itself under `_tucount._tcp` with its node id, whatever its
+Each terminal announces itself under `_trucount._tcp` with its node id, whatever its
 role, and follows the peer to a new address when DHCP moves it. Matching is on node id,
 so a terminal follows the one it is paired with and not whatever else is on the network.
 
@@ -280,7 +280,7 @@ Verified on a Xiaomi Redmi Note 8 Pro (Android 11, MIUI):
 ```
 acquireMulticastLock uid=10251
 mDNS - Announced self as 1a1f0d46 at 192.168.2.67:8080; browsing for peers
-mDNS - Claimed tucount.local -> 192.168.2.67:8080
+mDNS - Claimed trucount.local -> 192.168.2.67:8080
 ```
 
 Verified between two Android terminals on real Wi-Fi, with no `adb` bridges: a Samsung
@@ -288,7 +288,7 @@ SM-X210 at `192.168.2.66` and a Xiaomi Redmi Note 8 Pro at `192.168.2.67` found 
 other by mDNS, were paired from the tablet's screen, and replicated two writes with zero
 lag.
 
-Still unverified: whether the POS app resolves `tucount.local`. The desktop proved
+Still unverified: whether the POS app resolves `trucount.local`. The desktop proved
 resolution on macOS; nothing has yet resolved it to an *Android* primary.
 
 ## API authentication is optional
@@ -319,7 +319,7 @@ was unusable: nobody transcribes that correctly between two tablets.
 
 A quieter failure than split-brain, and one that happened in testing: after a run of
 forced promotions both terminals ended up demoted. Every write was refused with `421`,
-and the redirect pointed at a terminal that refused it too — tills failing with nowhere
+and the redirect pointed at a terminal that refused it too — terminals failing with nowhere
 to go while both screens looked perfectly healthy.
 
 Each terminal now raises `noPrimaryAnywhere` when it is not primary, the peer is
@@ -334,24 +334,24 @@ it is not a way to pick which terminal wins an argument.
 
 ## The screen
 
-Written for whoever is standing at the till, not for whoever wrote the replication.
+Written for whoever is standing at the terminal, not for whoever wrote the replication.
 
-A healthy terminal shows one sentence — "Taking sales" or "Backing up the main till" —
+A healthy terminal shows one sentence — "Taking sales" or "Backing up the main terminal" —
 whether the other one is connected, and the address the POS app uses. Nothing else, and
 nothing to press by accident.
 
-Roles are named **main till** and **backup till**. Epochs, node ids, sequence numbers,
+Roles are named **main terminal** and **backup terminal**. Epochs, node ids, sequence numbers,
 endpoints, the database path and the auth switch are all still there, under **Technical
 details**, which is where they are useful when something is genuinely wrong.
 
-**"Make this the main till" only appears when there is something to fix** — no primary
-anywhere, the main till not answering, or a terminal not set up yet. A healthy backup
-showing that button invites somebody to press it, and pressing it while the main till is
+**"Make this the main terminal" only appears when there is something to fix** — no primary
+anywhere, the main terminal not answering, or a terminal not set up yet. A healthy backup
+showing that button invites somebody to press it, and pressing it while the main terminal is
 working is how a shop ends up with two sets of takings. That is not hypothetical: it is
 what produced the epoch 3/4/5 forced promotions in the audit trail. A planned changeover
 is still possible, from Technical details.
 
-The setup card disappears once the two are joined. On the main till it had been offering
+The setup card disappears once the two are joined. On the main terminal it had been offering
 to turn itself into the backup.
 
 ## Notes

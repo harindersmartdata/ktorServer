@@ -35,8 +35,8 @@ class MainActivity : ComponentActivity() {
         // an empty pairing panel and could not be paired.
         lifecycleScope.launch { app.secrets.load() }
 
-        // Start serving without waiting to be asked, as the desktop build does. A till
-        // that needs someone to tap Start every morning is a till that will spend some
+        // Start serving without waiting to be asked, as the desktop build does. A terminal
+        // that needs someone to tap Start every morning is a terminal that will spend some
         // mornings not serving. The buttons stay for deliberate control; the service is
         // idempotent, so this is a no-op when it is already running.
         KtorServerService.start(this)

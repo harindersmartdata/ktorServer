@@ -34,9 +34,9 @@ fun main() = application {
     val repository = remember {
         UserRepository(database.userDao(), database.writeDao(), store)
     }
-    // TUCOUNT_PORT lets a second instance run alongside the first when testing failover.
+    // TRUCOUNT_PORT lets a second instance run alongside the first when testing failover.
     val port = remember {
-        System.getenv("TUCOUNT_PORT")?.toIntOrNull() ?: KtorServer.DEFAULT_PORT
+        System.getenv("TRUCOUNT_PORT")?.toIntOrNull() ?: KtorServer.DEFAULT_PORT
     }
     // Env overrides let an installer inject the shared secret; otherwise it is
     // generated on first run and shown on screen for pairing.
@@ -44,8 +44,8 @@ fun main() = application {
         SecretsStore(
             dao = database.replicationStateDao(),
             store = store,
-            nodeTokenOverride = System.getenv("TUCOUNT_NODE_TOKEN"),
-            clientTokenOverride = System.getenv("TUCOUNT_CLIENT_TOKEN"),
+            nodeTokenOverride = System.getenv("TRUCOUNT_NODE_TOKEN"),
+            clientTokenOverride = System.getenv("TRUCOUNT_CLIENT_TOKEN"),
         )
     }
     val replicator = remember {
@@ -81,7 +81,7 @@ fun main() = application {
         )
     }
 
-    // A till should be serving the moment the machine finishes booting — nobody is
+    // A terminal should be serving the moment the machine finishes booting — nobody is
     // going to click Start every morning.
     val uiScope = rememberCoroutineScope()
 
@@ -95,7 +95,7 @@ fun main() = application {
             controller.stop()
             exitApplication()
         },
-        title = "TuCount local server :$port",
+        title = "TruCount local server :$port",
         state = rememberWindowState(width = 560.dp, height = 820.dp),
     ) {
         App(

@@ -36,7 +36,7 @@ class NoPrimaryAvailable(candidates: List<String>) :
 /**
  * Talks to whichever terminal is currently primary.
  *
- * A till is configured with the addresses of both server terminals and this works out
+ * A terminal is configured with the addresses of both server terminals and this works out
  * which one to use, re-resolving whenever that changes. Failover is therefore invisible
  * to calling code: a sale rung during a promotion is retried against the new primary
  * rather than failing.
@@ -48,7 +48,7 @@ class NoPrimaryAvailable(candidates: List<String>) :
  * secondary can be behind; [allowStaleReads] relaxes that when stale data is acceptable
  * and availability matters more.
  */
-class TuCountClient(
+class TruCountClient(
     private val candidates: List<String>,
     /** Client token issued by the server pair. Null only for an unsecured install. */
     private val token: String? = null,
@@ -57,7 +57,7 @@ class TuCountClient(
     private val allowStaleReads: Boolean = false,
 ) {
 
-    private val logger = KtorSimpleLogger("TuCountClient")
+    private val logger = KtorSimpleLogger("TruCountClient")
 
     private val _primary = MutableStateFlow<String?>(null)
 
