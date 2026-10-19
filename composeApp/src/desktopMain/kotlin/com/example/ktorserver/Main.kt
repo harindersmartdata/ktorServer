@@ -8,6 +8,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.example.ktorserver.data.ReplicationStore
+import com.example.ktorserver.data.DatabaseMaintenance
 import com.example.ktorserver.data.TestRecordInserter
 import com.example.ktorserver.data.UserRepository
 import com.example.ktorserver.data.createDatabase
@@ -64,6 +65,7 @@ fun main() = application {
     val promotion = remember {
         PromotionCoordinator(store, database.promotionDao(), monitor)
     }
+    val maintenance = remember { DatabaseMaintenance(database) }
     val testRecords = remember { TestRecordInserter(repository, store, replicator) }
     val controller = remember {
         DesktopServerController(
@@ -73,6 +75,7 @@ fun main() = application {
             writeDao = database.writeDao(),
             promotions = database.promotionDao(),
             promotionCoordinator = promotion,
+            maintenance = maintenance,
             secrets = { secrets.load() },
             secretsStore = secrets,
             replicator = replicator,

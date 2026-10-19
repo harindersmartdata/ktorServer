@@ -1,6 +1,7 @@
 package com.example.ktorserver
 
 import android.app.Application
+import com.example.ktorserver.data.DatabaseMaintenance
 import com.example.ktorserver.data.ReplicationStore
 import com.example.ktorserver.data.TestRecordInserter
 import com.example.ktorserver.data.UserRepository
@@ -35,6 +36,8 @@ class KtorServerApp : Application() {
     val writeDao by lazy { database.writeDao() }
 
     val promotionDao by lazy { database.promotionDao() }
+
+    val maintenance by lazy { DatabaseMaintenance(database) }
 
     val testRecords by lazy { TestRecordInserter(userRepository, replicationStore, replicator) }
 

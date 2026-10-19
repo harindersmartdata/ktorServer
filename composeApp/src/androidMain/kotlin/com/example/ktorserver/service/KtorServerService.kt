@@ -91,6 +91,8 @@ class KtorServerService : Service() {
                 (app.replicator as? HttpChangeReplicator)?.startCatchUp(scope)
                 // Probes the peer so liveness is observed rather than assumed.
                 app.peerMonitor.start(scope)
+                // Stops the write-ahead log growing without bound under sustained writes.
+                app.maintenance.start(scope)
             }
             .onFailure { error ->
                 _lastError.value = error.message ?: error::class.java.simpleName

@@ -26,6 +26,7 @@ class DesktopServerController(
     promotionCoordinator: PromotionCoordinator? = null,
     secrets: (suspend () -> com.example.ktorserver.security.Secrets)? = null,
     secretsStore: com.example.ktorserver.security.SecretsStore? = null,
+    private val maintenance: com.example.ktorserver.data.DatabaseMaintenance? = null,
     private val replicator: ChangeReplicator = NoReplication,
     private val monitor: PeerMonitor? = null,
     port: Int = KtorServer.DEFAULT_PORT,
@@ -65,6 +66,7 @@ class DesktopServerController(
                 (replicator as? HttpChangeReplicator)?.startCatchUp(scope)
                 // Probes the peer so liveness is observed rather than assumed.
                 monitor?.start(scope)
+                maintenance?.start(scope)
             }
             .onFailure { error ->
                 // Port already taken is the common one — surface it instead of dying.
